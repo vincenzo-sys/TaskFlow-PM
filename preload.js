@@ -1,6 +1,7 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  setZoomFactor: (factor) => webFrame.setZoomFactor(factor),
   loadData: () => ipcRenderer.invoke('load-data'),
   saveData: (data) => ipcRenderer.invoke('save-data', data),
   exportData: (data) => ipcRenderer.invoke('export-data', data),
@@ -23,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
   // File operations
   openPath: (filePath) => ipcRenderer.invoke('open-path', filePath),
   browseFile: () => ipcRenderer.invoke('browse-file'),
+  writeFile: (filePath, content) => ipcRenderer.invoke('write-file', { filePath, content }),
   // Clipboard
   copyToClipboard: (text) => ipcRenderer.invoke('copy-to-clipboard', text),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
@@ -38,12 +40,13 @@ contextBridge.exposeInMainWorld('api', {
   onFloatingBarToggleSubtask: (callback) => {
     ipcRenderer.on('floating-bar-toggle-subtask', (event, taskId, subtaskId) => callback(taskId, subtaskId));
   },
+  onFloatingBarRemoveTask: (callback) => {
+    ipcRenderer.on('floating-bar-remove-task', (event, taskId) => callback(taskId));
+  },
   // Claude Queue
   runClaudeQueue: () => ipcRenderer.invoke('run-claude-queue'),
-  // Notion Sync
-  notionTestConnection: (apiKey) => ipcRenderer.invoke('notion-test-connection', apiKey),
-  notionSetup: (config) => ipcRenderer.invoke('notion-setup', config),
-  notionSaveConfig: (config) => ipcRenderer.invoke('notion-save-config', config),
-  notionGetConfig: () => ipcRenderer.invoke('notion-get-config'),
-  notionSync: () => ipcRenderer.invoke('notion-sync')
+  // Claude Session
+  launchClaudeSession: (context) => ipcRenderer.invoke('launch-claude-session', context),
+  // Claude Launcher (project-specific launchers with config)
+  launchClaudeWithConfig: (config) => ipcRenderer.invoke('launch-claude-with-config', config)
 });

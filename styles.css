@@ -121,19 +121,7 @@ textarea:focus-visible {
 }
 
 /* Smooth view transitions */
-.task-view {
-  transition: opacity var(--transition-slow), transform var(--transition-slow);
-}
-
-.task-view:not(.active) {
-  opacity: 0;
-  transform: translateY(10px);
-  pointer-events: none;
-}
-
 .task-view.active {
-  opacity: 1;
-  transform: translateY(0);
   animation: viewFadeIn 0.15s ease-out;
 }
 

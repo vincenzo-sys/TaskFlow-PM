@@ -1127,6 +1127,23 @@ class TaskFlowApp {
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
+      // Ctrl+Plus / Ctrl+Minus / Ctrl+0 for zoom
+      if (e.ctrlKey && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        this.changeFontScale(10);
+        return;
+      }
+      if (e.ctrlKey && e.key === '-') {
+        e.preventDefault();
+        this.changeFontScale(-10);
+        return;
+      }
+      if (e.ctrlKey && e.key === '0') {
+        e.preventDefault();
+        this.resetFontScale();
+        return;
+      }
+
       // Check if we're in an input field
       const isInputFocused = document.activeElement.tagName === 'INPUT' ||
                              document.activeElement.tagName === 'TEXTAREA' ||
@@ -5181,7 +5198,11 @@ class TaskFlowApp {
 
   applyFontScale() {
     const scale = this.data.fontScale || 100;
-    document.documentElement.style.fontSize = (14 * scale / 100) + 'px';
+    // Use Electron's native webFrame zoom — scales everything correctly
+    // without breaking scroll or layout calculations
+    if (window.api && window.api.setZoomFactor) {
+      window.api.setZoomFactor(scale / 100);
+    }
   }
 
   updateFontSizeDisplay() {
