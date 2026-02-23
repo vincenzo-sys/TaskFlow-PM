@@ -1,5 +1,14 @@
 // TaskFlow PM - Main Application Logic
 
+// Shared priority color map — matches CSS variables
+const PRIORITY_COLORS = {
+  urgent: '#dc2626',
+  high: '#f97316',
+  medium: '#eab308',
+  low: '#22c55e',
+  none: '#dbd8d3'
+};
+
 class TaskFlowApp {
   constructor() {
     this.data = null;
@@ -91,6 +100,7 @@ class TaskFlowApp {
     this.applyFontScale();
 
     this.bindEvents();
+    this.setupFocusReturnRefresh();
     this.render();
 
     // Listen for quick capture
@@ -109,9 +119,13 @@ class TaskFlowApp {
       this.updateFloatingBar();
     });
 
-    // Check Notion connection on startup and start auto-sync
-    this.loadNotionConfig();
-    this.startNotionAutoSync();
+    // Listen for floating bar remove task
+    window.api.onFloatingBarRemoveTask?.((taskId) => {
+      this.removeActiveTask(taskId);
+      this.updateFloatingBar();
+      this.render();
+    });
+
   }
 
   handleFloatingBarComplete(taskId) {
@@ -224,26 +238,24 @@ class TaskFlowApp {
   updateFloatingBar() {
     if (!this.floatingBarVisible || !window.api.updateFloatingBar) return;
 
-    let taskData = null;
-    const firstActiveId = this.todayView.workingOnTaskIds[0];
-    if (firstActiveId) {
-      const task = this.getAllTasks().find(t => t.id === firstActiveId);
-      if (task) {
-        taskData = {
-          id: task.id,
-          name: task.name,
-          description: task.description || '',
-          context: task.context || '',
-          workNotes: task.workNotes || '',
-          subtasks: (task.subtasks || []).map(st => ({
-            id: st.id,
-            name: st.name,
-            status: st.status
-          }))
-        };
-      }
-    }
-    window.api.updateFloatingBar(taskData);
+    const allTasks = this.getAllTasks();
+    const tasksData = this.todayView.workingOnTaskIds
+      .map(id => allTasks.find(t => t.id === id))
+      .filter(t => t && t.status !== 'done')
+      .map(task => ({
+        id: task.id,
+        name: task.name,
+        priority: task.priority || 'none',
+        description: task.description || '',
+        context: task.context || '',
+        workNotes: task.workNotes || '',
+        subtasks: (task.subtasks || []).map(st => ({
+          id: st.id,
+          name: st.name,
+          status: st.status
+        }))
+      }));
+    window.api.updateFloatingBar(tasksData);
   }
 
   handleTaskCaptured(task) {
@@ -260,14 +272,20 @@ class TaskFlowApp {
     this.showToast('Data refreshed');
   }
 
-  showToast(message, duration = 2000) {
+  showToast(message, duration = 2000, type = 'default') {
     // Remove existing toast if any
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
 
     const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = message;
+    toast.className = `toast toast-${type}`;
+
+    if (type === 'success') {
+      toast.innerHTML = `<svg class="toast-check" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg><span>${this.escapeHtml(message)}</span>`;
+    } else {
+      toast.textContent = message;
+    }
+
     document.body.appendChild(toast);
 
     // Trigger animation
@@ -339,6 +357,9 @@ class TaskFlowApp {
       // Time blocking fields
       scheduledTime: taskData.scheduledTime || null,  // HH:MM format
       scheduledDate: taskData.scheduledDate || null,  // YYYY-MM-DD format
+      startDate: taskData.startDate || null,  // YYYY-MM-DD — timeline start
+      endDate: taskData.endDate || null,      // YYYY-MM-DD — timeline end
+      assignee: taskData.assignee || null,    // Team member name
       estimatedMinutes: taskData.estimatedMinutes || null,  // Duration preset
       waitingReason: taskData.waitingReason || null,  // Why task is blocked
       blockedBy: taskData.blockedBy || null,  // Who/what is blocking
@@ -545,6 +566,7 @@ class TaskFlowApp {
       color: projectData.color || '#6366f1',
       categoryId: projectData.categoryId || null,
       status: projectData.status || 'active',
+      workingDirectory: projectData.workingDirectory || null,
       tasks: [],
       createdAt: new Date().toISOString()
     };
@@ -834,26 +856,16 @@ class TaskFlowApp {
 
     // Settings button
     document.getElementById('settings-btn').addEventListener('click', () => {
-      this.loadNotionConfig();
       this.updateFontSizeDisplay();
+      this.renderTeamMembersList();
       this.openModal('settings-modal');
     });
 
-    // Notion sync buttons
-    document.getElementById('notion-connect-btn')?.addEventListener('click', () => this.openNotionSetup());
-    document.getElementById('notion-sync-btn')?.addEventListener('click', () => this.triggerNotionSync());
-    document.getElementById('notion-disconnect-btn')?.addEventListener('click', () => this.disconnectNotion());
-    document.getElementById('sidebar-notion-sync-btn')?.addEventListener('click', () => this.triggerNotionSync());
-
-    // Notion setup modal steps
-    document.getElementById('notion-integrations-link')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      window.api.openExternal('https://www.notion.so/my-integrations');
+    // Team members management
+    document.getElementById('add-team-member-btn')?.addEventListener('click', () => this.addTeamMember());
+    document.getElementById('team-member-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this.addTeamMember(); }
     });
-    document.getElementById('notion-step1-next')?.addEventListener('click', () => this.notionSetupGoToStep(2));
-    document.getElementById('notion-test-btn')?.addEventListener('click', () => this.notionTestConnection());
-    document.getElementById('notion-step2-next')?.addEventListener('click', () => this.notionSetupGoToStep(3));
-    document.getElementById('notion-create-db-btn')?.addEventListener('click', () => this.notionCreateAndSync());
 
     // Modal close buttons
     document.querySelectorAll('.modal-close').forEach(btn => {
@@ -1052,6 +1064,19 @@ class TaskFlowApp {
           const path = await window.api.browseFile();
           if (path) {
             this.addFilePathToModal(path);
+          }
+        }
+      });
+    }
+
+    // Browse button for project working directory
+    const browseDirBtn = document.getElementById('project-browse-dir');
+    if (browseDirBtn) {
+      browseDirBtn.addEventListener('click', async () => {
+        if (window.api && window.api.browseFile) {
+          const dirPath = await window.api.browseFile();
+          if (dirPath) {
+            document.getElementById('project-working-dir').value = dirPath;
           }
         }
       });
@@ -1385,7 +1410,7 @@ class TaskFlowApp {
         status: wasDone ? 'todo' : 'done'
       });
       if (!wasDone) {
-        this.showToast(`${task.name} completed`);
+        this.showToast(`${task.name} completed`, 2000, 'success');
         this.addCompletionToRecap(task.name, null);
         if (this.todayView.workingOnTaskIds.includes(this.selectedTaskId)) {
           this.removeActiveTask(this.selectedTaskId);
@@ -1770,6 +1795,8 @@ class TaskFlowApp {
     document.getElementById('calendar-view').classList.remove('active');
     const commandCenterView = document.getElementById('command-center-view');
     if (commandCenterView) commandCenterView.classList.remove('active');
+    const claudeView = document.getElementById('claude-view');
+    if (claudeView) claudeView.classList.remove('active');
 
     // Handle special views
     if (view === 'command-center' || view === 'today') {
@@ -1809,6 +1836,12 @@ class TaskFlowApp {
       document.querySelector('.sort-select').style.display = 'none';
       document.querySelector('.filter-select').style.display = 'none';
       this.renderDashboard();
+    } else if (view === 'claude') {
+      document.getElementById('claude-view').classList.add('active');
+      document.querySelector('.view-options').style.display = 'none';
+      document.querySelector('.sort-select').style.display = 'none';
+      document.querySelector('.filter-select').style.display = 'none';
+      this.renderClaudeView();
     } else if (view.startsWith('project-')) {
       document.getElementById('task-list-view').classList.add('active');
       document.querySelector('.view-options').style.display = 'none';
@@ -2260,8 +2293,9 @@ class TaskFlowApp {
       `;
       completedTasks.forEach(t => {
         const project = this.data.projects.find(p => p.tasks.some(pt => pt.id === t.id));
+        const execCls = t.executionType ? `exec-${t.executionType}` : '';
         html += `
-          <div class="calendar-task-item completed">
+          <div class="calendar-task-item completed ${execCls}">
             <span class="calendar-task-status completed"></span>
             <span class="calendar-task-name">${this.escapeHtml(t.name)}</span>
             ${project && !project.isInbox ? `<span class="calendar-task-project">${this.escapeHtml(project.name)}</span>` : ''}
@@ -2281,8 +2315,9 @@ class TaskFlowApp {
       `;
       pendingDue.forEach(t => {
         const project = this.data.projects.find(p => p.tasks.some(pt => pt.id === t.id));
+        const execCls = t.executionType ? `exec-${t.executionType}` : '';
         html += `
-          <div class="calendar-task-item">
+          <div class="calendar-task-item ${execCls}">
             <span class="calendar-task-status ${isOverdue ? 'overdue' : 'due'}"></span>
             <span class="calendar-task-name">${this.escapeHtml(t.name)}</span>
             ${project && !project.isInbox ? `<span class="calendar-task-project">${this.escapeHtml(project.name)}</span>` : ''}
@@ -2387,6 +2422,10 @@ class TaskFlowApp {
       document.getElementById('task-list-view')?.classList.add('active');
       hideHeaderControls();
       this.renderDashboard();
+    } else if (this.currentView === 'claude') {
+      document.getElementById('claude-view')?.classList.add('active');
+      hideHeaderControls();
+      this.renderClaudeView();
     } else if (this.currentView.startsWith('project-')) {
       document.getElementById('task-list-view')?.classList.add('active');
       hideHeaderControls();
@@ -2394,6 +2433,49 @@ class TaskFlowApp {
     } else {
       showHeaderControls();
       this.renderTasks();
+    }
+
+    this.updateStatusBar();
+  }
+
+  updateStatusBar() {
+    const bar = document.getElementById('status-bar');
+    if (!bar) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const allTasks = this.getAllTasks();
+    const todayTasks = allTasks.filter(t =>
+      t.status !== 'done' && (t.dueDate === today || t.scheduledDate === today)
+    );
+    const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 };
+
+    // Current active task
+    const workingIds = this.data.workingOnTaskIds || this.todayView?.workingOnTaskIds || [];
+    const currentTask = workingIds.length > 0 ? this.findTask(workingIds[0]) : null;
+
+    const dot = bar.querySelector('.status-dot');
+    const taskName = bar.querySelector('.status-task-name');
+    if (currentTask) {
+      dot.classList.add('active');
+      taskName.textContent = currentTask.name;
+    } else {
+      dot.classList.remove('active');
+      taskName.textContent = 'No active task';
+    }
+
+    // Next task from today queue (first non-active by priority)
+    const nextTask = todayTasks
+      .filter(t => !workingIds.includes(t.id))
+      .sort((a, b) => (priorityOrder[a.priority] || 4) - (priorityOrder[b.priority] || 4))[0];
+    const nextNameEl = bar.querySelector('.status-next-name');
+    if (nextNameEl) {
+      nextNameEl.textContent = nextTask ? nextTask.name : '--';
+    }
+
+    // Count
+    const countEl = document.getElementById('status-bar-count');
+    if (countEl) {
+      countEl.textContent = `${todayTasks.length} task${todayTasks.length !== 1 ? 's' : ''} today`;
     }
   }
 
@@ -3582,7 +3664,8 @@ class TaskFlowApp {
 
   createBoardTaskElement(task) {
     const el = document.createElement('div');
-    el.className = 'board-task';
+    const execCls = task.executionType ? `exec-${task.executionType}` : '';
+    el.className = `board-task ${execCls}`;
     el.dataset.id = task.id;
     el.draggable = true;
 
@@ -3682,6 +3765,17 @@ class TaskFlowApp {
     document.getElementById('task-estimated-minutes').value = '';
     document.querySelectorAll('.duration-btn').forEach(btn => btn.classList.remove('selected'));
 
+    // Reset timeline fields
+    const startDateInput = document.getElementById('task-start-date');
+    const endDateInput = document.getElementById('task-end-date');
+    const assigneeInput = document.getElementById('task-assignee');
+    if (startDateInput) startDateInput.value = '';
+    if (endDateInput) endDateInput.value = '';
+    if (assigneeInput) {
+      this.populateAssigneeDropdown(assigneeInput);
+      assigneeInput.value = '';
+    }
+
     if (taskId) {
       const task = this.findTask(taskId);
       if (task) {
@@ -3699,6 +3793,17 @@ class TaskFlowApp {
         document.getElementById('task-scheduled-time').value = task.scheduledTime || '';
         document.getElementById('task-scheduled-date').value = task.scheduledDate || '';
         document.getElementById('task-estimated-minutes').value = task.estimatedMinutes || '';
+
+        // Set timeline fields
+        const startDateEl = document.getElementById('task-start-date');
+        const endDateEl = document.getElementById('task-end-date');
+        const assigneeEl = document.getElementById('task-assignee');
+        if (startDateEl) startDateEl.value = task.startDate || '';
+        if (endDateEl) endDateEl.value = task.endDate || '';
+        if (assigneeEl) {
+          this.populateAssigneeDropdown(assigneeEl);
+          assigneeEl.value = task.assignee || '';
+        }
 
         // Select duration button if estimatedMinutes is set
         if (task.estimatedMinutes) {
@@ -3744,6 +3849,12 @@ class TaskFlowApp {
     const scheduledDate = document.getElementById('task-scheduled-date').value || null;
     const estimatedMinutes = parseInt(document.getElementById('task-estimated-minutes').value) || null;
 
+    // Get timeline fields
+    const startDate = document.getElementById('task-start-date')?.value || null;
+    const endDate = document.getElementById('task-end-date')?.value || null;
+    const assigneeEl = document.getElementById('task-assignee');
+    const assignee = assigneeEl ? (assigneeEl.value || null) : null;
+
     const taskData = {
       name: document.getElementById('task-name').value.trim(),
       description: document.getElementById('task-description').value.trim(),
@@ -3754,6 +3865,9 @@ class TaskFlowApp {
       dueDate: document.getElementById('task-due-date').value || null,
       scheduledTime: scheduledTime,
       scheduledDate: scheduledDate || (scheduledTime ? this.getLocalDateString() : null),
+      startDate: startDate,
+      endDate: endDate,
+      assignee: assignee,
       estimatedMinutes: estimatedMinutes,
       tags: selectedTags,
       filePaths: this._tempFilePaths || []
@@ -3769,6 +3883,59 @@ class TaskFlowApp {
 
     this.closeModal('task-modal');
     this.render();
+  }
+
+  populateAssigneeDropdown(selectEl) {
+    const members = (this.data.settings && this.data.settings.teamMembers) || [];
+    selectEl.innerHTML = '<option value="">Unassigned</option>';
+    members.forEach(name => {
+      selectEl.innerHTML += `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`;
+    });
+  }
+
+  renderTeamMembersList() {
+    const container = document.getElementById('team-members-list');
+    if (!container) return;
+    const members = (this.data.settings && this.data.settings.teamMembers) || [];
+    if (members.length === 0) {
+      container.innerHTML = '<span class="settings-text" style="font-size:12px;color:var(--text-muted)">No team members added yet.</span>';
+      return;
+    }
+    container.innerHTML = members.map(name => `
+      <div class="team-member-chip">
+        <span>${this.escapeHtml(name)}</span>
+        <button class="team-member-remove" data-name="${this.escapeHtml(name)}" title="Remove">&times;</button>
+      </div>
+    `).join('');
+    container.querySelectorAll('.team-member-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.removeTeamMember(btn.dataset.name);
+      });
+    });
+  }
+
+  addTeamMember() {
+    const input = document.getElementById('team-member-input');
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) return;
+    if (!this.data.settings) this.data.settings = {};
+    if (!this.data.settings.teamMembers) this.data.settings.teamMembers = [];
+    if (this.data.settings.teamMembers.includes(name)) {
+      this.showToast('Team member already exists');
+      return;
+    }
+    this.data.settings.teamMembers.push(name);
+    this.saveData();
+    input.value = '';
+    this.renderTeamMembersList();
+  }
+
+  removeTeamMember(name) {
+    if (!this.data.settings || !this.data.settings.teamMembers) return;
+    this.data.settings.teamMembers = this.data.settings.teamMembers.filter(m => m !== name);
+    this.saveData();
+    this.renderTeamMembersList();
   }
 
   openProjectModal(projectId = null) {
@@ -3797,11 +3964,13 @@ class TaskFlowApp {
     document.querySelector('#project-color-picker .color-option').classList.add('selected');
     document.getElementById('project-color').value = '#3498db';
 
-    // Reset goal and status
+    // Reset goal, status, working directory
     const goalInput = document.getElementById('project-goal');
     if (goalInput) goalInput.value = '';
     const statusSelect = document.getElementById('project-status');
     if (statusSelect) statusSelect.value = 'active';
+    const workingDirInput = document.getElementById('project-working-dir');
+    if (workingDirInput) workingDirInput.value = '';
 
     if (projectId) {
       const project = this.data.projects.find(p => p.id === projectId);
@@ -3827,6 +3996,11 @@ class TaskFlowApp {
           statusSelect.value = project.status;
         }
 
+        // Set working directory
+        if (workingDirInput && project.workingDirectory) {
+          workingDirInput.value = project.workingDirectory;
+        }
+
         // Select color
         document.querySelectorAll('#project-color-picker .color-option').forEach(o => {
           o.classList.toggle('selected', o.dataset.color === project.color);
@@ -3849,13 +4023,15 @@ class TaskFlowApp {
     const goalInput = document.getElementById('project-goal');
     const statusSelect = document.getElementById('project-status');
 
+    const workingDirInput = document.getElementById('project-working-dir');
     const projectData = {
       name: document.getElementById('project-name').value.trim(),
       description: document.getElementById('project-description').value.trim(),
       color: document.getElementById('project-color').value,
       categoryId: categorySelect ? categorySelect.value || null : null,
       goal: goalInput ? goalInput.value.trim() : '',
-      status: statusSelect ? statusSelect.value : 'active'
+      status: statusSelect ? statusSelect.value : 'active',
+      workingDirectory: workingDirInput ? workingDirInput.value.trim() || null : null
     };
 
     if (projectId) {
@@ -4391,6 +4567,7 @@ class TaskFlowApp {
       ` : ''}
 
       <div class="detail-actions">
+        <button class="btn btn-claude" id="detail-claude-btn">Claude</button>
         <button class="btn btn-secondary" id="detail-edit-btn">Edit</button>
         <button class="btn btn-danger" id="detail-delete-btn">Delete</button>
       </div>
@@ -4492,6 +4669,13 @@ class TaskFlowApp {
       this.copyTaskToClipboard(task);
     });
 
+    // Claude button
+    content.querySelector('#detail-claude-btn').addEventListener('click', () => {
+      const prompt = this.buildTaskClaudePrompt(task.id);
+      const project = this.data.projects.find(p => p.tasks.some(t => t.id === task.id));
+      this.launchClaudeSession(prompt, task.name, project ? project.id : null);
+    });
+
     // File path clicks
     content.querySelectorAll('.detail-file-item').forEach(item => {
       item.addEventListener('click', () => {
@@ -4549,6 +4733,281 @@ class TaskFlowApp {
       const original = btn.textContent;
       btn.textContent = '✓ Copied!';
       setTimeout(() => { btn.textContent = original; }, 1500);
+    }
+  }
+
+  buildTaskClaudePrompt(taskId) {
+    const task = this.findTask(taskId);
+    if (!task) return '';
+
+    const project = this.data.projects.find(p => p.tasks.some(t => t.id === taskId));
+    const projectName = project && !project.isInbox ? project.name : 'Inbox';
+
+    let prompt = `# Task: ${task.name}\n\n`;
+    prompt += `**Status:** ${this.formatStatus(task.status)}\n`;
+    prompt += `**Priority:** ${task.priority}\n`;
+    prompt += `**Project:** ${projectName}\n`;
+    if (task.executionType) prompt += `**Execution Type:** ${task.executionType}\n`;
+    if (task.assignee) prompt += `**Assignee:** ${task.assignee}\n`;
+    if (task.dueDate) prompt += `**Due Date:** ${task.dueDate}\n`;
+    if (task.estimatedMinutes) prompt += `**Estimated Duration:** ${task.estimatedMinutes} minutes\n`;
+
+    if (task.description) {
+      prompt += `\n## Description\n${task.description}\n`;
+    }
+
+    if (task.context) {
+      prompt += `\n## Context / Brain Dump\n${task.context}\n`;
+    }
+
+    if (task.workNotes) {
+      prompt += `\n## Work Notes\n${task.workNotes}\n`;
+    }
+
+    if (task.subtasks && task.subtasks.length > 0) {
+      prompt += `\n## Subtasks\n`;
+      task.subtasks.forEach(st => {
+        prompt += `- [${st.status === 'done' ? 'x' : ' '}] ${st.name}\n`;
+      });
+    }
+
+    if (task.filePaths && task.filePaths.length > 0) {
+      prompt += `\n## Attached Files\n`;
+      task.filePaths.forEach(fp => {
+        prompt += `- ${fp}\n`;
+      });
+    }
+
+    if (task.blockedBy && task.blockedBy.length > 0) {
+      prompt += `\n## Blocked By\n`;
+      task.blockedBy.forEach(id => {
+        const blocker = this.findTask(id);
+        prompt += `- ${blocker ? blocker.name : id}\n`;
+      });
+    }
+
+    if (task.status === 'waiting' && task.waitingReason) {
+      prompt += `\n## Waiting Reason\n${task.waitingReason}\n`;
+    }
+
+    if (project && !project.isInbox) {
+      prompt += `\n## Project Context\n`;
+      prompt += `**Project:** ${project.name}\n`;
+      if (project.goal) prompt += `**Goal:** ${project.goal}\n`;
+    }
+
+    prompt += `\n---\nHelp me work on this task. The context has been copied to your clipboard — this is the task I need help with.`;
+
+    return prompt;
+  }
+
+  buildProjectClaudePrompt(projectId) {
+    const project = this.data.projects.find(p => p.id === projectId);
+    if (!project) return '';
+
+    const activeTasks = project.tasks.filter(t => t.status !== 'done');
+    const completedTasks = project.tasks.filter(t => t.status === 'done');
+
+    let prompt = `# Project: ${project.name}\n\n`;
+    if (project.goal) prompt += `**Goal:** ${project.goal}\n`;
+    if (project.description) prompt += `**Description:** ${project.description}\n`;
+    prompt += `**Tasks:** ${activeTasks.length} active, ${completedTasks.length} completed\n`;
+
+    if (activeTasks.length > 0) {
+      prompt += `\n## Active Tasks\n`;
+      const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 };
+      const sorted = [...activeTasks].sort((a, b) =>
+        (priorityOrder[a.priority] ?? 4) - (priorityOrder[b.priority] ?? 4)
+      );
+
+      sorted.forEach(task => {
+        prompt += `\n### ${task.name}\n`;
+        prompt += `- **Status:** ${this.formatStatus(task.status)} | **Priority:** ${task.priority}`;
+        if (task.executionType) prompt += ` | **Type:** ${task.executionType}`;
+        prompt += `\n`;
+        if (task.description) prompt += `- ${task.description}\n`;
+        if (task.subtasks && task.subtasks.length > 0) {
+          task.subtasks.forEach(st => {
+            prompt += `  - [${st.status === 'done' ? 'x' : ' '}] ${st.name}\n`;
+          });
+        }
+      });
+    }
+
+    prompt += `\n---\nHelp me work on this project. The context has been copied to your clipboard.`;
+
+    return prompt;
+  }
+
+  generateProjectClaudeMd(projectId) {
+    const project = this.data.projects.find(p => p.id === projectId);
+    if (!project) return '';
+
+    const activeTasks = project.tasks.filter(t => t.status !== 'done');
+    const completedTasks = project.tasks.filter(t => t.status === 'done');
+    const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 };
+    const sorted = [...activeTasks].sort((a, b) =>
+      (priorityOrder[a.priority] ?? 4) - (priorityOrder[b.priority] ?? 4)
+    );
+
+    let md = `# ${project.name}\n\n`;
+    if (project.goal) md += `**Goal:** ${project.goal}\n\n`;
+    if (project.description) md += `${project.description}\n\n`;
+    if (project.status) md += `**Status:** ${project.status}\n\n`;
+
+    // Active tasks
+    if (sorted.length > 0) {
+      md += `## Active Tasks (${sorted.length})\n\n`;
+      sorted.forEach(task => {
+        const badges = [];
+        badges.push(this.formatStatus(task.status));
+        badges.push(task.priority);
+        if (task.executionType) badges.push(task.executionType);
+        if (task.assignee) badges.push(`@${task.assignee}`);
+        if (task.dueDate) badges.push(`due ${task.dueDate}`);
+
+        md += `### ${task.name}\n`;
+        md += `${badges.join(' | ')}\n\n`;
+        if (task.description) md += `${task.description}\n\n`;
+        if (task.subtasks && task.subtasks.length > 0) {
+          md += `**Subtasks:**\n`;
+          task.subtasks.forEach(st => {
+            md += `- [${st.status === 'done' ? 'x' : ' '}] ${st.name}\n`;
+          });
+          md += `\n`;
+        }
+        if (task.filePaths && task.filePaths.length > 0) {
+          md += `**Files:** ${task.filePaths.join(', ')}\n\n`;
+        }
+        if (task.blockedBy && task.blockedBy.length > 0) {
+          const blockerNames = task.blockedBy.map(id => {
+            const b = this.findTask(id);
+            return b ? b.name : id;
+          });
+          md += `**Blocked by:** ${blockerNames.join(', ')}\n\n`;
+        }
+      });
+    }
+
+    // Completed summary
+    if (completedTasks.length > 0) {
+      md += `## Completed Tasks\n\n${completedTasks.length} tasks completed.\n\n`;
+    }
+
+    // Reference section
+    md += `## TaskFlow Context\n\n`;
+    md += `- **Execution types:** ai (Claude works autonomously), manual (human action), hybrid (collaborative)\n`;
+    md += `- **Statuses:** todo, in-progress, waiting, done\n`;
+    md += `- **Priorities:** urgent > high > medium > low > none\n`;
+
+    return md;
+  }
+
+  showSetDirectoryDialog(projectName) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay active';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width: 460px;">
+          <div class="modal-header">
+            <h2>Set Working Directory</h2>
+          </div>
+          <div class="modal-body">
+            <p style="margin-bottom: 16px;">"${this.escapeHtml(projectName)}" doesn't have a working directory set. Claude sessions need a directory to launch in and write CLAUDE.md to.</p>
+            <div class="form-group" style="margin-bottom: 0;">
+              <div class="form-row" style="gap: 8px;">
+                <input type="text" id="set-dir-path" placeholder="Choose a folder..." style="flex: 1;" readonly>
+                <button type="button" class="btn btn-secondary" id="set-dir-browse">Browse</button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" id="set-dir-skip">Skip</button>
+            <button class="btn btn-primary" id="set-dir-confirm" disabled>Launch Here</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      const pathInput = overlay.querySelector('#set-dir-path');
+      const confirmBtn = overlay.querySelector('#set-dir-confirm');
+
+      overlay.querySelector('#set-dir-browse').addEventListener('click', async () => {
+        const dirPath = await window.api.browseFile();
+        if (dirPath) {
+          pathInput.value = dirPath;
+          confirmBtn.disabled = false;
+        }
+      });
+
+      overlay.querySelector('#set-dir-skip').addEventListener('click', () => {
+        document.body.removeChild(overlay);
+        resolve(null);
+      });
+
+      confirmBtn.addEventListener('click', () => {
+        const chosen = pathInput.value;
+        document.body.removeChild(overlay);
+        resolve(chosen || null);
+      });
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          document.body.removeChild(overlay);
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  async launchClaudeSession(prompt, sessionLabel, projectId = null) {
+    let project = null;
+    let workingDir = null;
+
+    if (projectId) {
+      project = this.data.projects.find(p => p.id === projectId);
+    }
+
+    if (project && project.workingDirectory) {
+      workingDir = project.workingDirectory;
+    } else if (project && !project.isInbox) {
+      // No directory set — ask user to pick one
+      const chosenDir = await this.showSetDirectoryDialog(project.name);
+      if (chosenDir) {
+        project.workingDirectory = chosenDir;
+        this.saveData();
+        workingDir = chosenDir;
+      } else {
+        // User skipped — clipboard only, no terminal
+        this.showToast('Context copied to clipboard (no directory set)');
+        await window.api.copyToClipboard(prompt);
+        return;
+      }
+    }
+
+    // Write CLAUDE.md if we have a working directory and a project
+    if (workingDir && project) {
+      const claudeMd = this.generateProjectClaudeMd(project.id);
+      const filePath = workingDir.replace(/\\/g, '/') + '/CLAUDE.md';
+      try {
+        await window.api.writeFile(filePath, claudeMd);
+      } catch (err) {
+        console.error('Failed to write CLAUDE.md:', err);
+      }
+    }
+
+    this.showToast('Launching Claude — context copied to clipboard');
+    try {
+      const result = await window.api.launchClaudeSession({
+        prompt,
+        workingDir,
+        sessionLabel
+      });
+      if (!result.success) {
+        this.showToast('Failed to launch Claude: ' + (result.error || 'Unknown error'), 4000);
+      }
+    } catch (err) {
+      this.showToast('Failed to launch Claude session', 4000);
     }
   }
 
@@ -4678,7 +5137,7 @@ class TaskFlowApp {
       const newStatus = wasDone ? 'todo' : 'done';
       this.updateTask(taskId, { status: newStatus });
       if (!wasDone) {
-        this.showToast(`${task.name} completed`);
+        this.showToast(`${task.name} completed`, 2000, 'success');
         this.addCompletionToRecap(task.name, null);
       }
       this.render();
@@ -5965,6 +6424,7 @@ class TaskFlowApp {
     }
   }
 
+
   renderTodayNotes() {
     // Load daily notes (for recaps)
     const dailyInput = document.getElementById('today-daily-notes-input');
@@ -6626,6 +7086,651 @@ class TaskFlowApp {
   }
 
   // ============================================
+  // CLAUDE INTEGRATION VIEW
+  // ============================================
+
+  renderClaudeView() {
+    const container = document.getElementById('claude-view');
+    if (!container) return;
+
+    document.getElementById('view-title').textContent = 'Claude';
+    document.getElementById('view-subtitle').textContent = 'Integration Hub';
+
+    const stats = this.getClaudeContextStats();
+    const sessions = this.data.claudeSessions || [];
+    const recentSessions = sessions.slice(-5).reverse();
+
+    container.innerHTML = `
+      <div class="claude-container">
+        <div class="claude-main">
+          <div>
+            <div class="claude-section-header">Quick Actions</div>
+            <div class="claude-quick-actions">
+              <div class="claude-action-card" data-action="plan-day">
+                <div class="claude-action-info">
+                  <div class="claude-action-icon">&#128197;</div>
+                  <div class="claude-action-text">
+                    <div class="claude-action-name">Plan My Day</div>
+                    <div class="claude-action-desc">Organize today's tasks, set priorities, assign work to Claude</div>
+                  </div>
+                </div>
+                <span class="claude-action-arrow">&#8250;</span>
+              </div>
+              <div class="claude-action-card" data-action="brain-dump">
+                <div class="claude-action-info">
+                  <div class="claude-action-icon">&#129504;</div>
+                  <div class="claude-action-text">
+                    <div class="claude-action-name">Process Brain Dumps</div>
+                    <div class="claude-action-desc">Convert unprocessed thoughts into structured tasks</div>
+                  </div>
+                </div>
+                <span class="claude-action-arrow">&#8250;</span>
+              </div>
+              <div class="claude-action-card" data-action="prioritize">
+                <div class="claude-action-info">
+                  <div class="claude-action-icon">&#9878;</div>
+                  <div class="claude-action-text">
+                    <div class="claude-action-name">Prioritize Tasks</div>
+                    <div class="claude-action-desc">Review all tasks and suggest priority changes</div>
+                  </div>
+                </div>
+                <span class="claude-action-arrow">&#8250;</span>
+              </div>
+              <div class="claude-action-card" data-action="weekly-review">
+                <div class="claude-action-info">
+                  <div class="claude-action-icon">&#128202;</div>
+                  <div class="claude-action-text">
+                    <div class="claude-action-name">Weekly Review</div>
+                    <div class="claude-action-desc">Summarize accomplishments, flag blockers, plan ahead</div>
+                  </div>
+                </div>
+                <span class="claude-action-arrow">&#8250;</span>
+              </div>
+              <div class="claude-action-card" data-action="next-actions">
+                <div class="claude-action-info">
+                  <div class="claude-action-icon">&#9889;</div>
+                  <div class="claude-action-text">
+                    <div class="claude-action-name">Suggest Next Actions</div>
+                    <div class="claude-action-desc">What to work on next based on current progress</div>
+                  </div>
+                </div>
+                <span class="claude-action-arrow">&#8250;</span>
+              </div>
+              <div class="claude-action-card" data-action="coach">
+                <div class="claude-action-info">
+                  <div class="claude-action-icon">&#127942;</div>
+                  <div class="claude-action-text">
+                    <div class="claude-action-name">Coach Me</div>
+                    <div class="claude-action-desc">Analyze work patterns, give honest feedback and advice</div>
+                  </div>
+                </div>
+                <span class="claude-action-arrow">&#8250;</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="claude-section-header">Custom Prompt</div>
+            <div class="claude-prompt-builder">
+              <textarea class="claude-prompt-textarea" id="claude-custom-prompt" placeholder="Ask Claude anything about your tasks...\n\nExamples:\n- Which tasks should I delegate?\n- Break down my biggest project into phases\n- What am I forgetting about?"></textarea>
+              <div class="claude-prompt-actions">
+                <button class="claude-prompt-send" id="claude-send-prompt">
+                  <span>&#128203;</span> Copy to Clipboard
+                </button>
+                <span class="claude-prompt-hint">Paste into Claude Desktop — MCP tools give full access to your tasks</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="claude-sidebar">
+          <div>
+            <div class="claude-section-header">Claude Can See</div>
+            <div class="claude-context-box">
+              <div class="claude-context-stats">
+                <div class="claude-context-stat">
+                  <span class="claude-context-stat-label">Tasks today</span>
+                  <span class="claude-context-stat-value">${stats.todayTasks}</span>
+                </div>
+                <div class="claude-context-stat">
+                  <span class="claude-context-stat-label">Overdue</span>
+                  <span class="claude-context-stat-value">${stats.overdueTasks}</span>
+                </div>
+                <div class="claude-context-stat">
+                  <span class="claude-context-stat-label">Brain dumps</span>
+                  <span class="claude-context-stat-value">${stats.brainDumps}</span>
+                </div>
+                <div class="claude-context-stat">
+                  <span class="claude-context-stat-label">Active projects</span>
+                  <span class="claude-context-stat-value">${stats.projects}</span>
+                </div>
+                <div class="claude-context-stat">
+                  <span class="claude-context-stat-label">Total open tasks</span>
+                  <span class="claude-context-stat-value">${stats.totalOpen}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="claude-section-header">Recent Sessions</div>
+            ${recentSessions.length > 0 ? `
+              <div class="claude-sessions-list">
+                ${recentSessions.map(s => `
+                  <div class="claude-session-item">
+                    <span class="claude-session-label">${this.escapeHtml(s.label)}</span>
+                    <span class="claude-session-time">${this.formatRelativeTime(s.timestamp)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : `
+              <div class="claude-empty-sessions">No sessions yet. Use a quick action to get started!</div>
+            `}
+          </div>
+
+          <div>
+            <div class="claude-section-header">How It Works</div>
+            <div class="claude-mcp-info">
+              <p>Quick actions build rich prompts with your task data and copy them to the clipboard.</p>
+              <p>Paste into <strong>Claude Desktop</strong> — it has <span class="claude-mcp-tool-count">35+ MCP tools</span> to read and modify your tasks directly.</p>
+              <p>When you switch back, TaskFlow auto-refreshes to show changes Claude made.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Bind quick action clicks
+    container.querySelectorAll('.claude-action-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const action = card.dataset.action;
+        this.handleClaudeQuickAction(action);
+      });
+    });
+
+    // Bind custom prompt send
+    const sendBtn = document.getElementById('claude-send-prompt');
+    const textarea = document.getElementById('claude-custom-prompt');
+    if (sendBtn && textarea) {
+      sendBtn.addEventListener('click', () => {
+        const text = textarea.value.trim();
+        if (!text) {
+          this.showToast('Type a prompt first');
+          return;
+        }
+        this.launchClaudeWithPrompt(this.buildCustomPrompt(text), 'Custom prompt');
+      });
+    }
+  }
+
+  getClaudeContextStats() {
+    const today = this.getLocalDateString();
+    const allTasks = this.getAllTasks();
+    const openTasks = allTasks.filter(t => t.status !== 'done');
+
+    const todayTasks = openTasks.filter(t =>
+      t.dueDate === today || t.scheduledDate === today
+    ).length;
+
+    const overdueTasks = openTasks.filter(t =>
+      t.dueDate && t.dueDate < today
+    ).length;
+
+    const brainDumps = allTasks.filter(t =>
+      t.context && t.context.trim() && t.status === 'todo'
+    ).length;
+
+    const projects = this.data.projects.filter(p =>
+      !p.isInbox && (p.status || 'active') === 'active'
+    ).length;
+
+    return {
+      todayTasks,
+      overdueTasks,
+      brainDumps,
+      projects,
+      totalOpen: openTasks.length
+    };
+  }
+
+  handleClaudeQuickAction(action) {
+    let prompt, label;
+    switch (action) {
+      case 'plan-day':
+        prompt = this.buildPlanMyDayPrompt();
+        label = 'Plan My Day';
+        break;
+      case 'brain-dump':
+        prompt = this.buildBrainDumpPrompt();
+        label = 'Process Brain Dumps';
+        break;
+      case 'prioritize':
+        prompt = this.buildPrioritizePrompt();
+        label = 'Prioritize Tasks';
+        break;
+      case 'weekly-review':
+        prompt = this.buildWeeklyReviewPrompt();
+        label = 'Weekly Review';
+        break;
+      case 'next-actions':
+        prompt = this.buildNextActionsPrompt();
+        label = 'Suggest Next Actions';
+        break;
+      case 'coach':
+        prompt = this.buildCoachPrompt();
+        label = 'Coach Me';
+        break;
+      default:
+        return;
+    }
+    this.launchClaudeWithPrompt(prompt, label);
+  }
+
+  launchClaudeWithPrompt(prompt, label) {
+    window.api.copyToClipboard(prompt);
+
+    // Record session
+    if (!this.data.claudeSessions) this.data.claudeSessions = [];
+    this.data.claudeSessions.push({
+      label,
+      timestamp: new Date().toISOString()
+    });
+    // Keep only last 20 sessions
+    if (this.data.claudeSessions.length > 20) {
+      this.data.claudeSessions = this.data.claudeSessions.slice(-20);
+    }
+    this._lastClaudeSession = Date.now();
+    this.saveData();
+
+    this.showToast('Prompt copied — paste into Claude Desktop', 3000);
+
+    // Re-render to show updated recent sessions
+    if (this.currentView === 'claude') {
+      this.renderClaudeView();
+    }
+  }
+
+  buildPlanMyDayPrompt() {
+    // Reuse existing planMyDay logic but return prompt instead of copying
+    const today = this.getLocalDateString();
+    const allTasks = this.getAllTasks().filter(t => t.status !== 'done');
+
+    const overdue = allTasks.filter(t => t.dueDate && t.dueDate < today);
+    const dueToday = allTasks.filter(t => t.dueDate === today);
+    const scheduledToday = allTasks.filter(t => t.scheduledDate === today && !dueToday.some(d => d.id === t.id));
+    const highPriority = allTasks.filter(t =>
+      (t.priority === 'urgent' || t.priority === 'high') &&
+      !dueToday.some(d => d.id === t.id) &&
+      !overdue.some(d => d.id === t.id) &&
+      !scheduledToday.some(d => d.id === t.id)
+    );
+    const inProgress = allTasks.filter(t =>
+      t.status === 'in-progress' &&
+      !dueToday.some(d => d.id === t.id) &&
+      !overdue.some(d => d.id === t.id) &&
+      !highPriority.some(d => d.id === t.id)
+    );
+    const waiting = allTasks.filter(t => t.status === 'waiting');
+    const activeIds = this.todayView.workingOnTaskIds || [];
+
+    const formatTask = this._formatTaskForPrompt.bind(this);
+
+    let prompt = `# Plan My Day\n\n`;
+    prompt += `Today is **${today}**. I have **${allTasks.length} open tasks**. `;
+    prompt += `Please analyze everything below and help me have the most productive day possible.\n\n`;
+
+    if (activeIds.length > 0) {
+      prompt += `## Currently Active\n`;
+      activeIds.forEach(id => {
+        const t = this.findTask(id);
+        if (t) prompt += formatTask(t);
+      });
+      prompt += '\n';
+    }
+
+    if (overdue.length > 0) {
+      prompt += `## OVERDUE (${overdue.length})\n`;
+      overdue.forEach(t => prompt += formatTask(t));
+      prompt += '\n';
+    }
+
+    if (dueToday.length > 0) {
+      prompt += `## Due Today (${dueToday.length})\n`;
+      dueToday.forEach(t => prompt += formatTask(t));
+      prompt += '\n';
+    }
+
+    if (scheduledToday.length > 0) {
+      prompt += `## Scheduled Today (${scheduledToday.length})\n`;
+      scheduledToday.forEach(t => prompt += formatTask(t));
+      prompt += '\n';
+    }
+
+    if (highPriority.length > 0) {
+      prompt += `## High/Urgent Priority (${highPriority.length})\n`;
+      highPriority.forEach(t => prompt += formatTask(t));
+      prompt += '\n';
+    }
+
+    if (inProgress.length > 0) {
+      prompt += `## In Progress (${inProgress.length})\n`;
+      inProgress.forEach(t => prompt += formatTask(t));
+      prompt += '\n';
+    }
+
+    if (waiting.length > 0) {
+      prompt += `## Waiting/Blocked (${waiting.length})\n`;
+      waiting.forEach(t => prompt += formatTask(t));
+      prompt += '\n';
+    }
+
+    const categorized = new Set([
+      ...activeIds, ...overdue.map(t => t.id), ...dueToday.map(t => t.id),
+      ...scheduledToday.map(t => t.id), ...highPriority.map(t => t.id),
+      ...inProgress.map(t => t.id), ...waiting.map(t => t.id),
+    ]);
+    const other = allTasks.filter(t => !categorized.has(t.id));
+    if (other.length > 0) {
+      prompt += `## Other Open Tasks (${other.length})\n`;
+      other.forEach(t => prompt += formatTask(t));
+      prompt += '\n';
+    }
+
+    prompt += `---\n\n`;
+    prompt += `## Your Role\n\n`;
+    prompt += `You are my Chief of Staff. Analyze my tasks and help me plan the most productive day. Use MCP tools to read full task details and make changes.\n\n`;
+    prompt += `## Instructions\n\n`;
+    prompt += `1. Ask me 2-3 quick questions about my priorities and energy level\n`;
+    prompt += `2. Then create a focused plan splitting work between me and Claude\n`;
+    prompt += `3. Use \`update_task\` to set priorities, assignees, and estimates\n`;
+    prompt += `4. Use \`create_subtasks\` to break down complex tasks\n`;
+    prompt += `5. Use \`sync_claude_queue\` to queue Claude-assigned work\n`;
+
+    return prompt;
+  }
+
+  buildBrainDumpPrompt() {
+    const allTasks = this.getAllTasks();
+    const brainDumps = allTasks.filter(t => t.context && t.context.trim() && t.status === 'todo');
+
+    let prompt = `# Process Brain Dumps\n\n`;
+    prompt += `I have **${brainDumps.length} unprocessed brain dump${brainDumps.length !== 1 ? 's' : ''}** that need to be turned into structured, actionable tasks.\n\n`;
+
+    if (brainDumps.length === 0) {
+      prompt += `Actually, there are no brain dumps to process right now. Instead, use \`get_inbox_tasks\` to check for unprocessed inbox items and help me organize those.\n`;
+      return prompt;
+    }
+
+    brainDumps.forEach((t, i) => {
+      prompt += `### Brain Dump ${i + 1}: ${t.name}\n`;
+      prompt += `Context: ${t.context}\n`;
+      if (t.description) prompt += `Description: ${t.description}\n`;
+      prompt += '\n';
+    });
+
+    prompt += `---\n\n`;
+    prompt += `## Instructions\n\n`;
+    prompt += `For each brain dump:\n`;
+    prompt += `1. Parse the raw thoughts into clear, actionable tasks\n`;
+    prompt += `2. Use \`update_task\` to set proper name, description, priority, and clear the context field\n`;
+    prompt += `3. Use \`create_subtasks\` if the task needs breaking down\n`;
+    prompt += `4. Suggest which project each belongs in\n`;
+    prompt += `5. Set \`executionType\` (ai/manual/hybrid) for each\n`;
+
+    return prompt;
+  }
+
+  buildPrioritizePrompt() {
+    const allTasks = this.getAllTasks().filter(t => t.status !== 'done');
+    const formatTask = this._formatTaskForPrompt.bind(this);
+
+    let prompt = `# Prioritize Tasks\n\n`;
+    prompt += `I have **${allTasks.length} open tasks**. Review them all and suggest priority changes.\n\n`;
+
+    // Group by current priority
+    const groups = { urgent: [], high: [], medium: [], low: [], none: [] };
+    allTasks.forEach(t => {
+      const p = t.priority || 'none';
+      if (groups[p]) groups[p].push(t);
+    });
+
+    for (const [priority, tasks] of Object.entries(groups)) {
+      if (tasks.length > 0) {
+        prompt += `## ${priority.charAt(0).toUpperCase() + priority.slice(1)} (${tasks.length})\n`;
+        tasks.forEach(t => prompt += formatTask(t));
+        prompt += '\n';
+      }
+    }
+
+    prompt += `---\n\n`;
+    prompt += `## Instructions\n\n`;
+    prompt += `1. Review every task's current priority\n`;
+    prompt += `2. Suggest changes — explain your reasoning\n`;
+    prompt += `3. After I approve, use \`update_task\` to set new priorities\n`;
+    prompt += `4. Flag tasks that should be archived, deferred, or deleted\n`;
+
+    return prompt;
+  }
+
+  buildWeeklyReviewPrompt() {
+    const today = this.getLocalDateString();
+    const allTasks = this.getAllTasks();
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekAgoStr = this.getLocalDateString(weekAgo);
+
+    const completedThisWeek = allTasks.filter(t =>
+      t.status === 'done' && t.completedAt && t.completedAt.split('T')[0] >= weekAgoStr
+    );
+    const overdue = allTasks.filter(t => t.status !== 'done' && t.dueDate && t.dueDate < today);
+    const openTasks = allTasks.filter(t => t.status !== 'done');
+
+    const recapEntries = (this.data.recapLog || []).filter(r => r.date >= weekAgoStr);
+
+    let prompt = `# Weekly Review\n\n`;
+    prompt += `Week ending **${today}**.\n\n`;
+
+    prompt += `## Completed This Week (${completedThisWeek.length})\n`;
+    if (completedThisWeek.length > 0) {
+      completedThisWeek.forEach(t => {
+        prompt += `- **${t.name}**`;
+        if (t.completionSummary) prompt += ` — ${t.completionSummary.slice(0, 100)}`;
+        prompt += '\n';
+      });
+    } else {
+      prompt += `(none)\n`;
+    }
+    prompt += '\n';
+
+    if (overdue.length > 0) {
+      prompt += `## Overdue (${overdue.length})\n`;
+      overdue.forEach(t => {
+        prompt += `- **${t.name}** — due ${t.dueDate}, priority: ${t.priority || 'none'}\n`;
+      });
+      prompt += '\n';
+    }
+
+    prompt += `## Open Tasks: ${openTasks.length}\n\n`;
+
+    if (recapEntries.length > 0) {
+      prompt += `## Recap Entries This Week\n`;
+      recapEntries.forEach(r => {
+        prompt += `- [${r.type}] ${r.content.slice(0, 150)}\n`;
+      });
+      prompt += '\n';
+    }
+
+    prompt += `---\n\n`;
+    prompt += `## Instructions\n\n`;
+    prompt += `1. Summarize what was accomplished this week\n`;
+    prompt += `2. Identify patterns (what went well, what didn't)\n`;
+    prompt += `3. Flag overdue items that need attention\n`;
+    prompt += `4. Suggest focus areas for next week\n`;
+    prompt += `5. Use \`get_productivity_stats\` for additional data\n`;
+
+    return prompt;
+  }
+
+  buildNextActionsPrompt() {
+    const today = this.getLocalDateString();
+    const allTasks = this.getAllTasks();
+    const openTasks = allTasks.filter(t => t.status !== 'done');
+    const activeIds = this.todayView.workingOnTaskIds || [];
+    const formatTask = this._formatTaskForPrompt.bind(this);
+
+    const completedToday = allTasks.filter(t =>
+      t.status === 'done' && t.completedAt && t.completedAt.split('T')[0] === today
+    );
+
+    let prompt = `# Suggest Next Actions\n\n`;
+    prompt += `Today is **${today}**. I've completed **${completedToday.length} tasks** today so far.\n\n`;
+
+    if (activeIds.length > 0) {
+      prompt += `## Currently Working On\n`;
+      activeIds.forEach(id => {
+        const t = this.findTask(id);
+        if (t) prompt += formatTask(t);
+      });
+      prompt += '\n';
+    }
+
+    if (completedToday.length > 0) {
+      prompt += `## Completed Today\n`;
+      completedToday.slice(0, 10).forEach(t => {
+        prompt += `- ~~${t.name}~~\n`;
+      });
+      prompt += '\n';
+    }
+
+    // Show top candidates
+    const candidates = openTasks
+      .filter(t => !activeIds.includes(t.id))
+      .sort((a, b) => {
+        const pOrd = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 };
+        return (pOrd[a.priority] || 4) - (pOrd[b.priority] || 4);
+      })
+      .slice(0, 15);
+
+    if (candidates.length > 0) {
+      prompt += `## Top Candidates (${candidates.length} of ${openTasks.length})\n`;
+      candidates.forEach(t => prompt += formatTask(t));
+      prompt += '\n';
+    }
+
+    prompt += `---\n\n`;
+    prompt += `## Instructions\n\n`;
+    prompt += `Based on what I've done today and what's left:\n`;
+    prompt += `1. Suggest the best 3-5 tasks to work on next\n`;
+    prompt += `2. Explain why each one (urgency, momentum, dependencies)\n`;
+    prompt += `3. Consider energy level — it's ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}\n`;
+    prompt += `4. Flag anything I should defer to tomorrow\n`;
+
+    return prompt;
+  }
+
+  buildCoachPrompt() {
+    // Delegate to existing coachMePrompt logic but return the prompt
+    const allTasks = this.getAllTasks();
+    const activeTasks = allTasks.filter(t => t.status !== 'done');
+    const today = this.getLocalDateString();
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 14);
+    const recentCompleted = allTasks
+      .filter(t => t.status === 'done' && t.completedAt && new Date(t.completedAt) >= cutoff)
+      .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+
+    const snoozed = activeTasks
+      .filter(t => (t.snoozeCount || 0) > 0)
+      .sort((a, b) => (b.snoozeCount || 0) - (a.snoozeCount || 0));
+
+    const waiting = activeTasks.filter(t => t.status === 'waiting');
+
+    let prompt = `# Coach Me\n\n`;
+    prompt += `Today is **${today}**. Be my work coach — analyze patterns, give honest feedback.\n\n`;
+
+    prompt += `## Recent Data\n`;
+    prompt += `- **${recentCompleted.length}** tasks completed in 14 days\n`;
+    prompt += `- **${activeTasks.length}** open tasks\n`;
+    prompt += `- **${snoozed.length}** frequently deferred tasks\n`;
+    prompt += `- **${waiting.length}** blocked/waiting tasks\n\n`;
+
+    if (snoozed.length > 0) {
+      prompt += `### Frequently Deferred\n`;
+      snoozed.slice(0, 5).forEach(t => {
+        prompt += `- **${t.name}** — snoozed ${t.snoozeCount}x\n`;
+      });
+      prompt += '\n';
+    }
+
+    prompt += `---\n\n`;
+    prompt += `## Instructions\n\n`;
+    prompt += `Use \`get_work_context\` and \`get_productivity_stats\` for full data, then:\n`;
+    prompt += `1. Identify patterns — what am I avoiding? What energizes me?\n`;
+    prompt += `2. Give honest feedback — don't sugarcoat\n`;
+    prompt += `3. Suggest 2-3 concrete changes for this week\n`;
+    prompt += `4. Ask me questions to coach better\n`;
+
+    return prompt;
+  }
+
+  buildCustomPrompt(userText) {
+    const stats = this.getClaudeContextStats();
+
+    let prompt = `# Custom Request\n\n`;
+    prompt += userText + '\n\n';
+    prompt += `---\n\n`;
+    prompt += `## Task Context\n`;
+    prompt += `- ${stats.todayTasks} tasks today, ${stats.overdueTasks} overdue, ${stats.totalOpen} total open\n`;
+    prompt += `- ${stats.projects} active projects, ${stats.brainDumps} brain dumps to process\n\n`;
+    prompt += `Use MCP tools (\`get_all_tasks\`, \`get_today_tasks\`, etc.) to access full task data and make changes.\n`;
+
+    return prompt;
+  }
+
+  _formatTaskForPrompt(t) {
+    const projectLookup = {};
+    (this.data.projects || []).forEach(p => {
+      (p.tasks || []).forEach(task => { projectLookup[task.id] = p.name; });
+    });
+    const tagLookup = {};
+    (this.data.tags || []).forEach(tag => { tagLookup[tag.id] = tag.name; });
+
+    let s = `- **${t.name}**`;
+    s += ` | Priority: ${t.priority || 'none'} | Type: ${t.executionType || 'manual'}`;
+    if (t.estimatedMinutes) s += ` | Est: ${t.estimatedMinutes}min`;
+    const proj = projectLookup[t.id];
+    if (proj && proj !== 'Inbox') s += ` | Project: ${proj}`;
+    const tags = (t.tags || []).map(id => tagLookup[id]).filter(Boolean);
+    if (tags.length) s += ` | Tags: ${tags.join(', ')}`;
+    s += '\n';
+    if (t.description) s += `  Description: ${t.description.slice(0, 200)}\n`;
+    if (t.context) s += `  Context: ${t.context.slice(0, 200)}\n`;
+    if (t.subtasks?.length > 0) {
+      const done = t.subtasks.filter(st => st.status === 'done').length;
+      s += `  Subtasks (${done}/${t.subtasks.length} done)\n`;
+    }
+    return s;
+  }
+
+  setupFocusReturnRefresh() {
+    if (this._focusReturnBound) return;
+    this._focusReturnBound = true;
+
+    window.addEventListener('focus', async () => {
+      // Only auto-refresh if a Claude session was launched recently (within 30 min)
+      if (this._lastClaudeSession && Date.now() - this._lastClaudeSession < 30 * 60 * 1000) {
+        const oldData = JSON.stringify(this.data);
+        this.data = await window.api.loadData();
+        if (JSON.stringify(this.data) !== oldData) {
+          this.render();
+          this.showToast('Tasks updated by Claude');
+        }
+      }
+    });
+  }
+
+  // ============================================
   // PROJECT HEALTH DASHBOARD
   // ============================================
 
@@ -6847,7 +7952,7 @@ class TaskFlowApp {
           if (this.todayView.workingOnTaskIds.includes(taskId)) {
             this.removeActiveTask(taskId);
           }
-          this.showToast(`${taskName} completed`);
+          this.showToast(`${taskName} completed`, 2000, 'success');
           this.renderTodayView();
         });
       });
@@ -6991,7 +8096,7 @@ class TaskFlowApp {
         this.showCompletionSummaryModal(taskId, () => {
           this.removeActiveTask(taskId);
           this.updateFloatingBar();
-          this.showToast(`${taskName} completed`);
+          this.showToast(`${taskName} completed`, 2000, 'success');
           this.renderTodayView();
         });
       });
@@ -9126,6 +10231,21 @@ class TaskFlowApp {
     return date.toLocaleDateString('en-US', options);
   }
 
+  formatRelativeDate(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
   formatStatus(status) {
     const labels = {
       'todo': 'Inbox',
@@ -9846,7 +10966,7 @@ class TaskFlowApp {
             task.completedAt = new Date().toISOString();
           }
         });
-        this.showToast(`Completed ${taskIds.length} tasks`);
+        this.showToast(`Completed ${taskIds.length} tasks`, 2000, 'success');
         break;
 
       case 'schedule-today':
@@ -9917,6 +11037,9 @@ class TaskFlowApp {
     // Enhanced header
     container.appendChild(this.createEnhancedProjectHeader(project));
 
+    // Launchers bar (below header, above planning)
+    container.appendChild(this.createProjectLaunchersBar(project));
+
     // Planning section — what to focus on
     container.appendChild(this.createProjectPlanningSection(project));
 
@@ -9935,6 +11058,12 @@ class TaskFlowApp {
         break;
       case 'timeline':
         this.renderProjectTimelineView(viewContent, project, tasks, viewState);
+        break;
+      case 'roadmap':
+        this.renderProjectRoadmapView(viewContent, project, tasks, viewState);
+        break;
+      case 'notebooks':
+        this.renderProjectNotebooks(viewContent, project);
         break;
       case 'list':
       default:
@@ -10059,8 +11188,7 @@ class TaskFlowApp {
   }
 
   _planningTaskPill(task, extra = '') {
-    const priorityColors = { urgent: '#dc2626', high: '#f97316', medium: '#eab308', low: '#22c55e', none: 'var(--border-medium)' };
-    const borderColor = priorityColors[task.priority] || 'var(--border-medium)';
+    const borderColor = PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.none;
     const execType = task.executionType || 'manual';
     const execTag = execType === 'ai' ? ' <span class="pill-exec ai">AI</span>' : execType === 'hybrid' ? ' <span class="pill-exec hybrid">HY</span>' : '';
 
@@ -10130,6 +11258,8 @@ class TaskFlowApp {
         <button class="project-view-btn ${viewState.viewMode === 'list' ? 'active' : ''}" data-mode="list" title="List view">List</button>
         <button class="project-view-btn ${viewState.viewMode === 'board' ? 'active' : ''}" data-mode="board" title="Board view">Board</button>
         <button class="project-view-btn ${viewState.viewMode === 'timeline' ? 'active' : ''}" data-mode="timeline" title="Timeline view">Timeline</button>
+        <button class="project-view-btn ${viewState.viewMode === 'roadmap' ? 'active' : ''}" data-mode="roadmap" title="Roadmap view">Roadmap</button>
+        <button class="project-view-btn ${viewState.viewMode === 'notebooks' ? 'active' : ''}" data-mode="notebooks" title="Notebooks">Notes</button>
       </div>
       <div class="project-filters">
         <select class="project-filter-select" data-filter="filterStatus">
@@ -10147,6 +11277,7 @@ class TaskFlowApp {
           <option value="name" ${viewState.sortBy === 'name' ? 'selected' : ''}>Name</option>
         </select>
       </div>
+      <button class="project-claude-btn" title="Launch Claude session for this project">Claude</button>
       <button class="project-add-task-btn" title="Add task to this project">+ Add Task</button>
     `;
 
@@ -10164,12 +11295,448 @@ class TaskFlowApp {
       });
     });
 
+    // Claude session button
+    toolbar.querySelector('.project-claude-btn').addEventListener('click', () => {
+      const prompt = this.buildProjectClaudePrompt(projectId);
+      const project = this.data.projects.find(p => p.id === projectId);
+      this.launchClaudeSession(prompt, project ? project.name : 'Project', projectId);
+    });
+
     // Add task button
     toolbar.querySelector('.project-add-task-btn').addEventListener('click', () => {
       this.openTaskModal(null, projectId);
     });
 
     return toolbar;
+  }
+
+  // ========================================
+  // PROJECT NOTEBOOKS
+  // ========================================
+
+  renderProjectNotebooks(container, project) {
+    if (!project.notebooks) project.notebooks = [];
+
+    const layout = document.createElement('div');
+    layout.className = 'project-notebooks-layout';
+
+    // Sidebar — notebook list
+    const sidebar = document.createElement('div');
+    sidebar.className = 'notebooks-sidebar';
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'notebooks-add-btn';
+    addBtn.textContent = '+ New Notebook';
+    addBtn.addEventListener('click', () => {
+      this.createNotebook(project.id);
+    });
+    sidebar.appendChild(addBtn);
+
+    const listEl = document.createElement('div');
+    listEl.className = 'notebooks-list';
+
+    // Sort: pinned first, then by updatedAt desc
+    const sorted = [...project.notebooks].sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      return new Date(b.updatedAt) - new Date(a.updatedAt);
+    });
+
+    // Track selected notebook
+    const selectedId = this._selectedNotebookId || (sorted.length > 0 ? sorted[0].id : null);
+
+    sorted.forEach(nb => {
+      const item = document.createElement('div');
+      item.className = `notebook-item ${nb.id === selectedId ? 'active' : ''}`;
+      item.innerHTML = `
+        <span class="notebook-item-icon">${this.escapeHtml(nb.icon || '\u{1F4DD}')}</span>
+        <div class="notebook-item-info">
+          <span class="notebook-item-title">${this.escapeHtml(nb.title)}</span>
+          <span class="notebook-item-date">${this.formatRelativeDate(nb.updatedAt)}</span>
+        </div>
+        ${nb.pinned ? '<span class="notebook-item-pin" title="Pinned">\u{1F4CC}</span>' : ''}
+      `;
+      item.addEventListener('click', () => {
+        this._selectedNotebookId = nb.id;
+        this.renderProjectView();
+      });
+      listEl.appendChild(item);
+    });
+
+    sidebar.appendChild(listEl);
+    layout.appendChild(sidebar);
+
+    // Editor panel
+    const editor = document.createElement('div');
+    editor.className = 'notebook-editor';
+
+    if (selectedId) {
+      const notebook = project.notebooks.find(n => n.id === selectedId);
+      if (notebook) {
+        this.renderNotebookEditor(editor, project, notebook);
+      } else {
+        editor.innerHTML = '<div class="notebook-empty">Select a notebook</div>';
+      }
+    } else {
+      editor.innerHTML = '<div class="notebook-empty">No notebooks yet. Create one to get started.</div>';
+    }
+
+    layout.appendChild(editor);
+    container.appendChild(layout);
+  }
+
+  renderNotebookEditor(container, project, notebook) {
+    const isPreview = this._notebookPreviewMode === notebook.id;
+
+    container.innerHTML = `
+      <div class="notebook-editor-header">
+        <input class="notebook-title-input" type="text" value="${this.escapeHtml(notebook.title)}" placeholder="Notebook title..." />
+        <div class="notebook-editor-actions">
+          <button class="notebook-pin-btn" title="${notebook.pinned ? 'Unpin' : 'Pin'}">${notebook.pinned ? '\u{1F4CC}' : 'Pin'}</button>
+          <button class="notebook-preview-btn">${isPreview ? 'Edit' : 'Preview'}</button>
+          <button class="notebook-delete-btn" title="Delete notebook">\u{1F5D1}</button>
+        </div>
+      </div>
+      <div class="notebook-editor-body">
+        ${isPreview
+          ? `<div class="notebook-preview">${this.renderMarkdownSimple(notebook.content || '')}</div>`
+          : `<textarea class="notebook-content-textarea" placeholder="Write your notes in markdown...">${this.escapeHtml(notebook.content || '')}</textarea>`
+        }
+      </div>
+    `;
+
+    // Title change
+    const titleInput = container.querySelector('.notebook-title-input');
+    titleInput.addEventListener('blur', () => {
+      const newTitle = titleInput.value.trim();
+      if (newTitle && newTitle !== notebook.title) {
+        notebook.title = newTitle;
+        notebook.updatedAt = new Date().toISOString();
+        this.saveData();
+      }
+    });
+
+    // Content autosave on blur
+    const textarea = container.querySelector('.notebook-content-textarea');
+    if (textarea) {
+      textarea.addEventListener('blur', () => {
+        if (textarea.value !== notebook.content) {
+          notebook.content = textarea.value;
+          notebook.updatedAt = new Date().toISOString();
+          this.saveData();
+        }
+      });
+    }
+
+    // Preview toggle
+    container.querySelector('.notebook-preview-btn').addEventListener('click', () => {
+      // Save content before toggling if in edit mode
+      if (!isPreview && textarea) {
+        notebook.content = textarea.value;
+        notebook.updatedAt = new Date().toISOString();
+        this.saveData();
+      }
+      this._notebookPreviewMode = isPreview ? null : notebook.id;
+      this.renderProjectView();
+    });
+
+    // Pin toggle
+    container.querySelector('.notebook-pin-btn').addEventListener('click', () => {
+      notebook.pinned = !notebook.pinned;
+      notebook.updatedAt = new Date().toISOString();
+      this.saveData();
+      this.renderProjectView();
+    });
+
+    // Delete
+    container.querySelector('.notebook-delete-btn').addEventListener('click', () => {
+      if (confirm(`Delete notebook "${notebook.title}"?`)) {
+        this.deleteNotebook(project.id, notebook.id);
+      }
+    });
+  }
+
+  createNotebook(projectId) {
+    const project = this.data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    if (!project.notebooks) project.notebooks = [];
+
+    const now = new Date().toISOString();
+    const nb = {
+      id: `nb-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      title: 'Untitled Notebook',
+      content: '',
+      icon: '',
+      pinned: false,
+      createdAt: now,
+      updatedAt: now
+    };
+    project.notebooks.push(nb);
+    this._selectedNotebookId = nb.id;
+    this.saveData();
+    this.renderProjectView();
+  }
+
+  deleteNotebook(projectId, notebookId) {
+    const project = this.data.projects.find(p => p.id === projectId);
+    if (!project || !project.notebooks) return;
+    project.notebooks = project.notebooks.filter(n => n.id !== notebookId);
+    if (this._selectedNotebookId === notebookId) {
+      this._selectedNotebookId = project.notebooks.length > 0 ? project.notebooks[0].id : null;
+    }
+    this._notebookPreviewMode = null;
+    this.saveData();
+    this.renderProjectView();
+    this.showToast('Notebook deleted');
+  }
+
+  renderMarkdownSimple(md) {
+    // Simple markdown to HTML (headings, bold, italic, lists, code blocks, links)
+    let html = this.escapeHtml(md);
+    // Code blocks
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Headers
+    html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+    // Bold and italic
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    // Unordered lists
+    html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+    // Line breaks (for non-block content)
+    html = html.replace(/\n/g, '<br>');
+    // Clean up extra <br> after block elements
+    html = html.replace(/<\/(h[234]|pre|ul|li)><br>/g, '</$1>');
+    html = html.replace(/<br><(h[234]|pre|ul)/g, '<$1');
+    return html;
+  }
+
+  // ========================================
+  // PROJECT LAUNCHERS
+  // ========================================
+
+  createProjectLaunchersBar(project) {
+    const bar = document.createElement('div');
+    bar.className = 'project-launchers-bar';
+
+    if (!project.launchers) project.launchers = [];
+
+    if (project.launchers.length === 0 && !project.isInbox) {
+      // Show a subtle "+ Add Launcher" link when no launchers exist
+      const addLink = document.createElement('button');
+      addLink.className = 'launcher-add-first';
+      addLink.textContent = '+ Add Claude Launcher';
+      addLink.addEventListener('click', () => {
+        this.openLauncherModal(project.id);
+      });
+      bar.appendChild(addLink);
+      return bar;
+    }
+
+    if (project.isInbox) return bar;
+
+    const label = document.createElement('span');
+    label.className = 'launchers-label';
+    label.textContent = 'LAUNCHERS';
+    bar.appendChild(label);
+
+    project.launchers.forEach(launcher => {
+      const pill = document.createElement('div');
+      pill.className = 'launcher-pill';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'launcher-pill-name';
+      nameSpan.textContent = launcher.name;
+      nameSpan.addEventListener('click', () => {
+        this.openLauncherModal(project.id, launcher.id);
+      });
+
+      const playBtn = document.createElement('button');
+      playBtn.className = 'launcher-pill-play';
+      playBtn.innerHTML = '&#9654;';
+      playBtn.title = `Launch "${launcher.name}" Claude session`;
+      playBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.launchClaudeFromLauncher(project.id, launcher.id);
+      });
+
+      pill.appendChild(nameSpan);
+      pill.appendChild(playBtn);
+      bar.appendChild(pill);
+    });
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'launcher-pill launcher-add-btn';
+    addBtn.textContent = '+ New';
+    addBtn.addEventListener('click', () => {
+      this.openLauncherModal(project.id);
+    });
+    bar.appendChild(addBtn);
+
+    return bar;
+  }
+
+  openLauncherModal(projectId, launcherId = null) {
+    const project = this.data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    if (!project.launchers) project.launchers = [];
+
+    const existing = launcherId ? project.launchers.find(l => l.id === launcherId) : null;
+    const isEdit = !!existing;
+
+    // Remove any existing modal
+    document.querySelector('.launcher-modal')?.remove();
+
+    const modal = document.createElement('div');
+    modal.className = 'launcher-modal';
+    modal.innerHTML = `
+      <div class="launcher-modal-backdrop"></div>
+      <div class="launcher-modal-content">
+        <h3>${isEdit ? 'Edit' : 'New'} Launcher</h3>
+        <div class="launcher-form">
+          <label>Name</label>
+          <input class="launcher-name-input" type="text" value="${this.escapeHtml(existing?.name || '')}" placeholder="e.g. Research, Code Gen, Analysis" />
+
+          <label>Memory / Context <span class="launcher-form-hint">Written to CLAUDE.md — Claude reads this automatically on startup</span></label>
+          <textarea class="launcher-memory-input" rows="6" placeholder="Project background, conventions, file paths, data model...">${this.escapeHtml(existing?.memory || '')}</textarea>
+
+          <label>Prompt Template <span class="launcher-form-hint">Copied to clipboard when you launch — paste as your first message</span></label>
+          <textarea class="launcher-prompt-input" rows="4" placeholder="You are working on... Your goal is to...">${this.escapeHtml(existing?.prompt || '')}</textarea>
+
+          <label>Flags <span class="launcher-form-hint">Optional CLI flags for claude command</span></label>
+          <input class="launcher-flags-input" type="text" value="${this.escapeHtml(existing?.flags || '')}" placeholder="e.g. --dangerously-skip-permissions" />
+        </div>
+        <div class="launcher-modal-actions">
+          ${isEdit ? '<button class="launcher-delete-btn">Delete</button>' : ''}
+          <div class="launcher-modal-right">
+            <button class="launcher-cancel-btn">Cancel</button>
+            <button class="launcher-save-btn">${isEdit ? 'Save' : 'Create'}</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Backdrop close
+    modal.querySelector('.launcher-modal-backdrop').addEventListener('click', () => modal.remove());
+
+    // Cancel
+    modal.querySelector('.launcher-cancel-btn').addEventListener('click', () => modal.remove());
+
+    // Save / Create
+    modal.querySelector('.launcher-save-btn').addEventListener('click', () => {
+      const name = modal.querySelector('.launcher-name-input').value.trim();
+      if (!name) {
+        this.showToast('Launcher name is required');
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const data = {
+        name,
+        memory: modal.querySelector('.launcher-memory-input').value,
+        prompt: modal.querySelector('.launcher-prompt-input').value,
+        flags: modal.querySelector('.launcher-flags-input').value.trim(),
+        updatedAt: now
+      };
+
+      if (isEdit) {
+        Object.assign(existing, data);
+      } else {
+        project.launchers.push({
+          id: `lnch-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          ...data,
+          createdAt: now
+        });
+      }
+
+      this.saveData();
+      modal.remove();
+      this.renderProjectView();
+      this.showToast(isEdit ? 'Launcher updated' : 'Launcher created');
+    });
+
+    // Delete
+    if (isEdit) {
+      modal.querySelector('.launcher-delete-btn').addEventListener('click', () => {
+        if (confirm(`Delete launcher "${existing.name}"?`)) {
+          project.launchers = project.launchers.filter(l => l.id !== launcherId);
+          this.saveData();
+          modal.remove();
+          this.renderProjectView();
+          this.showToast('Launcher deleted');
+        }
+      });
+    }
+
+    document.body.appendChild(modal);
+    modal.querySelector('.launcher-name-input').focus();
+  }
+
+  async launchClaudeFromLauncher(projectId, launcherId) {
+    const project = this.data.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const launcher = (project.launchers || []).find(l => l.id === launcherId);
+    if (!launcher) return;
+
+    let workDir = project.workingDirectory;
+
+    if (!workDir && !project.isInbox) {
+      const chosenDir = await this.showSetDirectoryDialog(project.name);
+      if (chosenDir) {
+        project.workingDirectory = chosenDir;
+        this.saveData();
+        workDir = chosenDir;
+      } else {
+        this.showToast('No working directory set — cannot launch');
+        return;
+      }
+    }
+
+    // Build CLAUDE.md: project context + launcher memory
+    if (workDir) {
+      let claudeMd = this.generateProjectClaudeMd(project.id);
+
+      if (launcher.memory) {
+        claudeMd += `\n\n---\n\n## Launcher: ${launcher.name}\n\n${launcher.memory}`;
+      }
+      if (launcher.outputDir) {
+        claudeMd += `\n\nOutput directory: ${launcher.outputDir}`;
+      }
+
+      const filePath = workDir.replace(/\\/g, '/') + '/CLAUDE.md';
+      try {
+        await window.api.writeFile(filePath, claudeMd);
+      } catch (err) {
+        console.error('Failed to write CLAUDE.md:', err);
+      }
+    }
+
+    // Copy only the prompt to clipboard (if present)
+    if (launcher.prompt) {
+      await window.api.copyToClipboard(launcher.prompt);
+      this.showToast(`Launching "${launcher.name}" — prompt copied to clipboard`);
+    } else {
+      this.showToast(`Launching "${launcher.name}"`);
+    }
+
+    try {
+      const result = await window.api.launchClaudeWithConfig({
+        workDir: workDir || undefined,
+        title: `${project.name}: ${launcher.name}`,
+        flags: launcher.flags || ''
+      });
+      if (!result.success) {
+        this.showToast('Failed to launch: ' + (result.error || 'Unknown error'), 4000);
+      }
+    } catch (err) {
+      this.showToast('Failed to launch Claude session', 4000);
+    }
   }
 
   createEnhancedTaskCard(task, options = {}) {
@@ -10180,8 +11747,7 @@ class TaskFlowApp {
     el.draggable = true;
 
     // Priority stripe color
-    const priorityColors = { urgent: '#dc2626', high: '#f97316', medium: '#eab308', low: '#22c55e', none: 'transparent' };
-    const stripeColor = priorityColors[task.priority] || 'transparent';
+    const stripeColor = PRIORITY_COLORS[task.priority] || 'transparent';
 
     // Only show exec badge for non-default types (AI, Hybrid)
     const execType = task.executionType || 'manual';
@@ -10429,14 +11995,298 @@ class TaskFlowApp {
     container.appendChild(board);
   }
 
+  // ---- ROADMAP VIEW ----
+
+  computeRoadmapPhases(tasks) {
+    const activeTasks = tasks.filter(t => t.status !== 'done');
+    const taskMap = new Map(activeTasks.map(t => [t.id, t]));
+    const depthCache = new Map();
+
+    const getDepth = (task, visiting = new Set()) => {
+      if (depthCache.has(task.id)) return depthCache.get(task.id);
+      if (visiting.has(task.id)) {
+        depthCache.set(task.id, 0);
+        return 0; // cycle guard
+      }
+      if (!task.blockedBy || task.blockedBy.length === 0) {
+        depthCache.set(task.id, 0);
+        return 0;
+      }
+      visiting.add(task.id);
+      let maxBlockerDepth = -1;
+      for (const blockerId of task.blockedBy) {
+        const blocker = taskMap.get(blockerId);
+        if (blocker) {
+          maxBlockerDepth = Math.max(maxBlockerDepth, getDepth(blocker, visiting));
+        }
+      }
+      const depth = maxBlockerDepth >= 0 ? maxBlockerDepth + 1 : 0;
+      depthCache.set(task.id, depth);
+      return depth;
+    };
+
+    // Compute depth for all active tasks
+    for (const task of activeTasks) {
+      getDepth(task);
+    }
+
+    // Group by depth
+    const phaseMap = new Map();
+    for (const task of activeTasks) {
+      const depth = depthCache.get(task.id) || 0;
+      if (!phaseMap.has(depth)) phaseMap.set(depth, []);
+      phaseMap.get(depth).push(task);
+    }
+
+    // Sort phases by depth, tasks within by priority then name
+    const priorities = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 };
+    const phases = [];
+    const sortedDepths = [...phaseMap.keys()].sort((a, b) => a - b);
+
+    for (const depth of sortedDepths) {
+      const phaseTasks = phaseMap.get(depth).sort((a, b) => {
+        const pa = priorities[a.priority] ?? 4;
+        const pb = priorities[b.priority] ?? 4;
+        if (pa !== pb) return pa - pb;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
+      // Compute phase date range from task dates
+      let startDate = null;
+      let endDate = null;
+      for (const t of phaseTasks) {
+        if (t.startDate) {
+          if (!startDate || t.startDate < startDate) startDate = t.startDate;
+        }
+        if (t.endDate) {
+          if (!endDate || t.endDate > endDate) endDate = t.endDate;
+        }
+      }
+
+      phases.push({
+        phaseNumber: depth + 1,
+        depth,
+        tasks: phaseTasks,
+        startDate,
+        endDate
+      });
+    }
+
+    return phases;
+  }
+
+  cascadeScheduleDates(project) {
+    const activeTasks = (project.tasks || []).filter(t => t.status !== 'done');
+    if (activeTasks.length === 0) {
+      this.showToast('No active tasks to schedule');
+      return;
+    }
+
+    const phases = this.computeRoadmapPhases(project.tasks || []);
+    const taskCount = phases.reduce((sum, p) => sum + p.tasks.length, 0);
+
+    this.showConfirmDialog(
+      'Cascade Dates',
+      `This will set start/end dates for ${taskCount} active tasks based on dependency order and estimated durations. Continue?`,
+      () => {
+        const startDateStr = project.roadmapStartDate || this.getLocalDateString();
+        const endDateMap = new Map(); // taskId -> endDate string
+
+        for (const phase of phases) {
+          for (const task of phase.tasks) {
+            // Determine task start date
+            let taskStart = startDateStr;
+            if (task.blockedBy && task.blockedBy.length > 0) {
+              let latestBlockerEnd = null;
+              for (const blockerId of task.blockedBy) {
+                const blockerEnd = endDateMap.get(blockerId);
+                if (blockerEnd && (!latestBlockerEnd || blockerEnd > latestBlockerEnd)) {
+                  latestBlockerEnd = blockerEnd;
+                }
+              }
+              if (latestBlockerEnd) {
+                taskStart = this.shiftDate(latestBlockerEnd, 1);
+              }
+            }
+
+            // Compute duration in days (8h workday)
+            const estMinutes = task.estimatedMinutes || 480; // default 1 day
+            const durationDays = Math.max(1, Math.ceil(estMinutes / 480));
+            const taskEnd = this.shiftDate(taskStart, durationDays - 1);
+
+            endDateMap.set(task.id, taskEnd);
+            this.updateTask(task.id, { startDate: taskStart, endDate: taskEnd });
+          }
+        }
+
+        this.showToast(`Dates cascaded for ${taskCount} tasks`);
+        this.renderProjectView();
+      }
+    );
+  }
+
+  renderProjectRoadmapView(container, project, tasks, viewState) {
+    const phases = this.computeRoadmapPhases(tasks);
+    const completedTasks = (tasks || []).filter(t => t.status === 'done');
+
+    const roadmap = document.createElement('div');
+    roadmap.className = 'roadmap-view';
+
+    // Toolbar: project start date + cascade button
+    const toolbar = document.createElement('div');
+    toolbar.className = 'roadmap-toolbar';
+    const currentStart = project.roadmapStartDate || this.getLocalDateString();
+    toolbar.innerHTML = `
+      <div class="roadmap-toolbar-left">
+        <label class="roadmap-start-label">Project start:
+          <input type="date" class="roadmap-start-input" value="${this.escapeHtml(currentStart)}" />
+        </label>
+      </div>
+      <button class="roadmap-cascade-btn">Cascade Dates</button>
+    `;
+
+    toolbar.querySelector('.roadmap-start-input').addEventListener('change', (e) => {
+      const val = e.target.value;
+      if (val) {
+        this.updateProject(project.id, { roadmapStartDate: val });
+      }
+    });
+
+    toolbar.querySelector('.roadmap-cascade-btn').addEventListener('click', () => {
+      // Re-fetch project in case start date just changed
+      const proj = this.data.projects.find(p => p.id === project.id);
+      this.cascadeScheduleDates(proj);
+    });
+
+    roadmap.appendChild(toolbar);
+
+    // Phases
+    if (phases.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'roadmap-empty';
+      empty.textContent = 'No active tasks in this project.';
+      roadmap.appendChild(empty);
+    } else {
+      for (const phase of phases) {
+        const phaseEl = document.createElement('div');
+        phaseEl.className = 'roadmap-phase';
+
+        // Phase header
+        const depLabel = phase.depth === 0
+          ? 'No blockers'
+          : `Depends on Phase ${phase.depth}`;
+        const dateRange = (phase.startDate && phase.endDate)
+          ? `${this.formatDate(phase.startDate)} \u2013 ${this.formatDate(phase.endDate)}`
+          : (phase.startDate ? `Starts ${this.formatDate(phase.startDate)}` : 'Dates not set');
+
+        const header = document.createElement('div');
+        header.className = 'roadmap-phase-header';
+        header.innerHTML = `
+          <div class="roadmap-phase-title">
+            <span class="roadmap-phase-num">Phase ${phase.phaseNumber}</span>
+            <span class="roadmap-phase-dep">\u2014 ${this.escapeHtml(depLabel)}</span>
+          </div>
+          <span class="roadmap-phase-dates">${dateRange}</span>
+        `;
+        phaseEl.appendChild(header);
+
+        // Task rows
+        for (const task of phase.tasks) {
+          const row = document.createElement('div');
+          row.className = 'roadmap-task-row';
+
+          // Priority stripe color
+          const prioColors = { urgent: '#ef4444', high: '#f97316', medium: '#eab308', low: '#3b82f6', none: '#6b7280' };
+          const prioColor = prioColors[task.priority] || prioColors.none;
+
+          // Status icon
+          const statusIcons = { 'todo': '\u25CB', 'in-progress': '\u25D4', 'waiting': '\u23F8' };
+          const statusIcon = statusIcons[task.status] || '\u25CB';
+
+          // Execution badge
+          const execBadge = task.executionType && task.executionType !== 'manual'
+            ? `<span class="roadmap-exec-badge roadmap-exec-${this.escapeHtml(task.executionType)}">${this.escapeHtml(task.executionType)}</span>`
+            : '';
+
+          // Duration
+          const estMin = task.estimatedMinutes;
+          let durationLabel = '';
+          if (estMin) {
+            const days = Math.ceil(estMin / 480);
+            durationLabel = days === 1 ? '1d' : `${days}d`;
+          }
+
+          // Assignee
+          const assignee = task.assignee ? this.escapeHtml(task.assignee) : '';
+
+          // Date range
+          let taskDates = '';
+          if (task.startDate && task.endDate) {
+            taskDates = `${this.formatDate(task.startDate)} \u2013 ${this.formatDate(task.endDate)}`;
+          } else if (task.startDate) {
+            taskDates = `Starts ${this.formatDate(task.startDate)}`;
+          }
+
+          // Dependency labels
+          let depLabels = '';
+          if (task.blockedBy && task.blockedBy.length > 0) {
+            const blockerNames = task.blockedBy
+              .map(id => this.findTask(id))
+              .filter(Boolean)
+              .map(t => this.escapeHtml(t.name.length > 25 ? t.name.slice(0, 25) + '\u2026' : t.name));
+            if (blockerNames.length > 0) {
+              depLabels = `<span class="roadmap-dep-label">blocked by ${blockerNames.join(', ')}</span>`;
+            }
+          }
+
+          row.innerHTML = `
+            <div class="roadmap-task-stripe" style="background: ${prioColor}"></div>
+            <span class="roadmap-task-status">${statusIcon}</span>
+            <span class="roadmap-task-name">${this.escapeHtml(task.name)}</span>
+            ${execBadge}
+            ${durationLabel ? `<span class="roadmap-task-duration">[${durationLabel}]</span>` : ''}
+            ${assignee ? `<span class="roadmap-task-assignee">[${assignee}]</span>` : ''}
+            ${taskDates ? `<span class="roadmap-task-dates">${taskDates}</span>` : ''}
+            ${depLabels}
+          `;
+
+          row.addEventListener('click', () => this.openDetailPanel(task.id));
+          phaseEl.appendChild(row);
+        }
+
+        roadmap.appendChild(phaseEl);
+      }
+    }
+
+    // Completed tasks summary
+    if (completedTasks.length > 0) {
+      const completed = document.createElement('div');
+      completed.className = 'roadmap-completed-summary';
+      completed.innerHTML = `<span class="roadmap-completed-icon">\u2713</span> ${completedTasks.length} completed task${completedTasks.length !== 1 ? 's' : ''}`;
+      roadmap.appendChild(completed);
+    }
+
+    container.appendChild(roadmap);
+  }
+
   // ---- TIMELINE VIEW ----
 
   renderProjectTimelineView(container, project, tasks, viewState) {
+    // Clean up previous event listeners
+    if (this._tlCleanup) {
+      this._tlCleanup();
+      this._tlCleanup = null;
+    }
+
     const projectId = project.id;
 
     // Initialize timeline state
     if (!this._projectTimelineState[projectId]) {
-      this._projectTimelineState[projectId] = { anchorDate: this.getLocalDateString() };
+      this._projectTimelineState[projectId] = {
+        anchorDate: this.getLocalDateString(),
+        tableWidth: 280,
+        groupBy: 'none'
+      };
     }
     const tlState = this._projectTimelineState[projectId];
     const range = viewState.timelineRange || 'month';
@@ -10448,7 +12298,7 @@ class TaskFlowApp {
     if (range === 'week') {
       const dayOfWeek = anchor.getDay();
       startDate = new Date(anchor);
-      startDate.setDate(anchor.getDate() - dayOfWeek); // Sunday
+      startDate.setDate(anchor.getDate() - dayOfWeek);
       endDate = new Date(startDate);
       endDate.setDate(startDate.getDate() + 6);
     } else {
@@ -10465,32 +12315,78 @@ class TaskFlowApp {
     }
 
     const todayStr = this.getLocalDateString();
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    // Format range label
     const rangeLabel = range === 'week'
       ? `${monthNames[startDate.getMonth()]} ${startDate.getDate()} - ${monthNames[endDate.getMonth()]} ${endDate.getDate()}, ${endDate.getFullYear()}`
       : `${monthNames[startDate.getMonth()]} ${startDate.getFullYear()}`;
 
-    // Build header
+    // Get tasks
+    const allTasks = this.getProjectFilteredTasks(project, { ...this.getProjectViewState(projectId), filterStatus: 'active' });
+    const datedTasks = [];
+    const undatedTasks = [];
+    allTasks.forEach(task => {
+      const hasDate = task.startDate || task.endDate || task.scheduledDate || task.dueDate;
+      if (hasDate) datedTasks.push(task);
+      else undatedTasks.push(task);
+    });
+
+    // Resolve effective start/end for each task
+    const taskDateInfo = datedTasks.map(task => {
+      const s = task.startDate || task.scheduledDate || task.endDate || task.dueDate;
+      const e = task.endDate || task.dueDate || task.startDate || task.scheduledDate;
+      return { task, startStr: s < e ? s : e, endStr: e > s ? e : s };
+    });
+
+    const dayStrs = days.map(d => this.getLocalDateString(d));
+    const firstDayStr = dayStrs[0];
+    const lastDayStr = dayStrs[dayStrs.length - 1];
+    const colWidth = range === 'week' ? 120 : 40;
+    const rowHeight = 40;
+
+    // Group tasks
+    const groupBy = tlState.groupBy || 'none';
+    let groups;
+    if (groupBy === 'assignee') {
+      const byAssignee = {};
+      taskDateInfo.forEach(info => {
+        const key = info.task.assignee || 'Unassigned';
+        if (!byAssignee[key]) byAssignee[key] = [];
+        byAssignee[key].push(info);
+      });
+      groups = Object.entries(byAssignee).map(([name, items]) => ({ label: name, items }));
+    } else {
+      groups = [{ label: null, items: taskDateInfo }];
+    }
+
+    // Build DOM
     const timeline = document.createElement('div');
     timeline.className = 'project-timeline';
 
-    const header = document.createElement('div');
-    header.className = 'project-timeline-header';
-    header.innerHTML = `
-      <button class="timeline-nav-btn" data-dir="prev">&#9664; Prev</button>
-      <span class="timeline-range-label">${rangeLabel}</span>
-      <button class="timeline-nav-btn" data-dir="next">Next &#9654;</button>
-      <div class="timeline-range-toggle">
-        <button class="timeline-range-btn ${range === 'week' ? 'active' : ''}" data-range="week">Week</button>
-        <button class="timeline-range-btn ${range === 'month' ? 'active' : ''}" data-range="month">Month</button>
+    // Toolbar
+    const toolbar = document.createElement('div');
+    toolbar.className = 'project-timeline-toolbar';
+    toolbar.innerHTML = `
+      <button class="tl-nav-btn" data-dir="prev">&#9664; Prev</button>
+      <span class="tl-range-label">${rangeLabel}</span>
+      <button class="tl-nav-btn" data-dir="next">Next &#9654;</button>
+      <div class="tl-range-toggle">
+        <button class="tl-range-btn ${range === 'week' ? 'active' : ''}" data-range="week">Week</button>
+        <button class="tl-range-btn ${range === 'month' ? 'active' : ''}" data-range="month">Month</button>
+      </div>
+      <div class="tl-group-control">
+        <label>Group:</label>
+        <select class="tl-group-select">
+          <option value="none" ${groupBy === 'none' ? 'selected' : ''}>None</option>
+          <option value="assignee" ${groupBy === 'assignee' ? 'selected' : ''}>Assignee</option>
+        </select>
       </div>
     `;
+    timeline.appendChild(toolbar);
 
     // Navigation events
-    header.querySelectorAll('.timeline-nav-btn').forEach(btn => {
+    toolbar.querySelectorAll('.tl-nav-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const dir = btn.dataset.dir;
         const current = new Date(tlState.anchorDate + 'T12:00:00');
@@ -10499,162 +12395,565 @@ class TaskFlowApp {
         } else {
           current.setMonth(current.getMonth() + (dir === 'next' ? 1 : -1));
         }
-        tlState.anchorDate = current.toISOString().split('T')[0];
+        tlState.anchorDate = this.getLocalDateString(current);
         this.renderProjectView();
       });
     });
 
-    header.querySelectorAll('.timeline-range-btn').forEach(btn => {
+    toolbar.querySelectorAll('.tl-range-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         this.updateProjectViewPref(projectId, 'timelineRange', btn.dataset.range);
       });
     });
 
-    timeline.appendChild(header);
+    toolbar.querySelector('.tl-group-select').addEventListener('change', (e) => {
+      tlState.groupBy = e.target.value;
+      this.renderProjectView();
+    });
 
-    // Legend
-    const legend = document.createElement('div');
-    legend.className = 'timeline-legend';
-    legend.innerHTML = `
-      <span class="timeline-legend-item"><span class="legend-dot exec-ai"></span>AI</span>
-      <span class="timeline-legend-item"><span class="legend-dot exec-manual"></span>Manual</span>
-      <span class="timeline-legend-item"><span class="legend-dot exec-hybrid"></span>Hybrid</span>
-      <span class="timeline-legend-sep"></span>
-      <span class="timeline-legend-item"><span class="legend-dot priority-urgent"></span>Urgent</span>
-      <span class="timeline-legend-item"><span class="legend-dot priority-high"></span>High</span>
-      <span class="timeline-legend-item"><span class="legend-dot priority-medium"></span>Medium</span>
+    // Split-panel body
+    const body = document.createElement('div');
+    body.className = 'tl-body';
+    body.style.setProperty('--tl-table-width', `${tlState.tableWidth}px`);
+
+    // === LEFT TABLE PANEL ===
+    const tablePanel = document.createElement('div');
+    tablePanel.className = 'tl-table-panel';
+
+    const tableHeader = document.createElement('div');
+    tableHeader.className = 'tl-table-header';
+    tableHeader.innerHTML = `
+      <div class="tl-th tl-th-name">Task</div>
+      <div class="tl-th tl-th-assignee">Assignee</div>
+      <div class="tl-th tl-th-start">Start</div>
+      <div class="tl-th tl-th-end">End</div>
     `;
-    timeline.appendChild(legend);
+    tablePanel.appendChild(tableHeader);
 
-    // Grid
-    const grid = document.createElement('div');
-    grid.className = 'project-timeline-grid';
-    grid.style.gridTemplateColumns = `repeat(${days.length}, 1fr)`;
+    const tableBody = document.createElement('div');
+    tableBody.className = 'tl-table-body';
+    this.renderTLTable(tableBody, groups, rowHeight);
+    tablePanel.appendChild(tableBody);
 
-    // Day headers
+    body.appendChild(tablePanel);
+
+    // === RESIZE HANDLE ===
+    const resizeHandle = document.createElement('div');
+    resizeHandle.className = 'tl-resize-handle';
+    body.appendChild(resizeHandle);
+
+    // === RIGHT CHART PANEL ===
+    const chartPanel = document.createElement('div');
+    chartPanel.className = 'tl-chart-panel';
+
+    const chartHeader = document.createElement('div');
+    chartHeader.className = 'tl-chart-header';
+    chartHeader.style.width = `${days.length * colWidth}px`;
     days.forEach(day => {
-      const dayStr = day.toISOString().split('T')[0];
+      const dayStr = this.getLocalDateString(day);
       const isToday = dayStr === todayStr;
       const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-      const dayHeader = document.createElement('div');
-      dayHeader.className = `timeline-day-header ${isToday ? 'today' : ''} ${isWeekend ? 'weekend' : ''}`;
-      dayHeader.innerHTML = `<span class="day-name">${dayNames[day.getDay()]}</span><span class="day-num">${day.getDate()}</span>`;
-      grid.appendChild(dayHeader);
+      const col = document.createElement('div');
+      col.className = `tl-col-header ${isToday ? 'tl-today' : ''} ${isWeekend ? 'tl-weekend' : ''}`;
+      col.style.width = `${colWidth}px`;
+      col.innerHTML = `<span class="tl-day-name">${dayNames[day.getDay()]}</span><span class="tl-day-num">${day.getDate()}</span>`;
+      chartHeader.appendChild(col);
     });
 
-    // Date strings for column lookup
-    const dayStrs = days.map(d => d.toISOString().split('T')[0]);
-    const firstDayStr = dayStrs[0];
-    const lastDayStr = dayStrs[dayStrs.length - 1];
+    const chartHeaderWrap = document.createElement('div');
+    chartHeaderWrap.className = 'tl-chart-header-wrap';
+    chartHeaderWrap.appendChild(chartHeader);
+    chartPanel.appendChild(chartHeaderWrap);
 
-    // Tasks with dates
-    const datedTasks = [];
-    const undatedTasks = [];
+    const chartBody = document.createElement('div');
+    chartBody.className = 'tl-chart-body';
 
-    // Use all project tasks (not filtered by status for timeline context)
-    const allTasks = this.getProjectFilteredTasks(project, { ...this.getProjectViewState(projectId), filterStatus: 'active' });
+    const chartInner = document.createElement('div');
+    chartInner.className = 'tl-chart-inner';
+    chartInner.style.width = `${days.length * colWidth}px`;
 
-    allTasks.forEach(task => {
-      if (!task.scheduledDate && !task.dueDate) {
-        undatedTasks.push(task);
-      } else {
-        datedTasks.push(task);
-      }
+    // Column background lines
+    const colBg = document.createElement('div');
+    colBg.className = 'tl-col-backgrounds';
+    colBg.style.width = `${days.length * colWidth}px`;
+    days.forEach((day, i) => {
+      const dayStr = this.getLocalDateString(day);
+      const isToday = dayStr === todayStr;
+      const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+      const bg = document.createElement('div');
+      bg.className = `tl-col-bg ${isToday ? 'tl-today-bg' : ''} ${isWeekend ? 'tl-weekend-bg' : ''}`;
+      bg.style.left = `${i * colWidth}px`;
+      bg.style.width = `${colWidth}px`;
+      colBg.appendChild(bg);
     });
+    chartInner.appendChild(colBg);
 
-    // Render task rows
-    const tasksArea = document.createElement('div');
-    tasksArea.className = 'timeline-tasks-area';
-    tasksArea.style.gridTemplateColumns = `repeat(${days.length}, 1fr)`;
+    // Today indicator line
+    const todayIdx = dayStrs.indexOf(todayStr);
+    if (todayIdx >= 0) {
+      const todayLine = document.createElement('div');
+      todayLine.className = 'tl-today-line';
+      todayLine.style.left = `${todayIdx * colWidth + colWidth / 2}px`;
+      chartInner.appendChild(todayLine);
+    }
 
-    datedTasks.forEach(task => {
-      // Start = scheduledDate (when work begins), End = dueDate (deadline)
-      // If only one is set, single-day bar on that date
-      const taskStart = task.scheduledDate && task.dueDate
-        ? (task.scheduledDate < task.dueDate ? task.scheduledDate : task.dueDate)
-        : (task.scheduledDate || task.dueDate);
-      const taskEnd = task.scheduledDate && task.dueDate
-        ? (task.dueDate > task.scheduledDate ? task.dueDate : task.scheduledDate)
-        : taskStart;
+    // Render bars
+    this.renderTLChart(chartInner, groups, dayStrs, colWidth, rowHeight, firstDayStr, lastDayStr);
 
-      // Clamp to visible range
-      const clampedStart = taskStart < firstDayStr ? firstDayStr : taskStart;
-      const clampedEnd = taskEnd > lastDayStr ? lastDayStr : taskEnd;
+    // SVG arrow layer
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const arrowSvg = document.createElementNS(svgNS, 'svg');
+    arrowSvg.classList.add('tl-arrows-svg');
+    arrowSvg.setAttribute('width', `${days.length * colWidth}`);
+    arrowSvg.setAttribute('height', '100%');
+    // Arrowhead marker
+    const defs = document.createElementNS(svgNS, 'defs');
+    const marker = document.createElementNS(svgNS, 'marker');
+    marker.setAttribute('id', 'tl-arrowhead');
+    marker.setAttribute('markerWidth', '8');
+    marker.setAttribute('markerHeight', '6');
+    marker.setAttribute('refX', '8');
+    marker.setAttribute('refY', '3');
+    marker.setAttribute('orient', 'auto');
+    const arrowPath = document.createElementNS(svgNS, 'path');
+    arrowPath.setAttribute('d', 'M0,0 L8,3 L0,6 Z');
+    arrowPath.setAttribute('fill', 'var(--text-muted)');
+    marker.appendChild(arrowPath);
+    defs.appendChild(marker);
+    arrowSvg.appendChild(defs);
+    chartInner.appendChild(arrowSvg);
 
-      const startIdx = dayStrs.indexOf(clampedStart);
-      const endIdx = dayStrs.indexOf(clampedEnd);
+    chartBody.appendChild(chartInner);
+    chartPanel.appendChild(chartBody);
+    body.appendChild(chartPanel);
+    timeline.appendChild(body);
 
-      if (startIdx === -1 && endIdx === -1) return; // out of range entirely
-
-      const effectiveStart = startIdx >= 0 ? startIdx : 0;
-      const effectiveEnd = endIdx >= 0 ? endIdx : days.length - 1;
-
-      const execType = task.executionType || 'manual';
-      const priority = task.priority || 'none';
-      const bar = document.createElement('div');
-      bar.className = `timeline-task-bar exec-${execType} priority-${priority} ${task.status === 'done' ? 'completed' : ''}`;
-      bar.style.gridColumn = `${effectiveStart + 1} / ${effectiveEnd + 2}`;
-
-      // Priority icon
-      const priorityIcons = { urgent: '!!', high: '!', medium: '', low: '', none: '' };
-      const priorityLabel = priorityIcons[priority] || '';
-
-      // Status icon
-      const statusIcons = { 'done': '\u2713', 'in-progress': '\u25B6', 'waiting': '\u23F8', 'todo': '' };
-      const statusIcon = statusIcons[task.status] || '';
-
-      // Time estimate
-      const timeLabel = task.estimatedMinutes
-        ? (task.estimatedMinutes >= 60 ? `${(task.estimatedMinutes / 60).toFixed(1).replace(/\.0$/, '')}h` : `${task.estimatedMinutes}m`)
-        : '';
-
-      // Subtask progress
-      const subtaskLabel = task.subtasks && task.subtasks.length > 0
-        ? `${task.subtasks.filter(s => s.done).length}/${task.subtasks.length}`
-        : '';
-
-      // Build bar content
-      let barHTML = '';
-      if (statusIcon) barHTML += `<span class="tbar-status">${statusIcon}</span>`;
-      if (priorityLabel) barHTML += `<span class="tbar-priority">${priorityLabel}</span>`;
-      barHTML += `<span class="tbar-name">${this.escapeHtml(task.name)}</span>`;
-      if (timeLabel) barHTML += `<span class="tbar-meta">${timeLabel}</span>`;
-      if (subtaskLabel) barHTML += `<span class="tbar-meta">${subtaskLabel}</span>`;
-      bar.innerHTML = barHTML;
-
-      // Rich tooltip
-      const tooltipParts = [task.name];
-      if (priority !== 'none') tooltipParts.push(`Priority: ${priority}`);
-      tooltipParts.push(`Status: ${task.status}`);
-      if (task.scheduledDate) tooltipParts.push(`Scheduled: ${task.scheduledDate}`);
-      if (task.dueDate) tooltipParts.push(`Due: ${task.dueDate}`);
-      if (timeLabel) tooltipParts.push(`Est: ${timeLabel}`);
-      if (subtaskLabel) tooltipParts.push(`Subtasks: ${subtaskLabel}`);
-      const execLabels = { ai: 'AI', manual: 'Manual', hybrid: 'Hybrid' };
-      tooltipParts.push(`Type: ${execLabels[execType] || execType}`);
-      bar.title = tooltipParts.join('\n');
-      bar.addEventListener('click', () => this.openDetailPanel(task.id));
-      tasksArea.appendChild(bar);
-    });
-
-    grid.appendChild(tasksArea);
-    timeline.appendChild(grid);
-
-    // Undated tasks section
+    // Undated drawer
     if (undatedTasks.length > 0) {
-      const noDateSection = document.createElement('div');
-      noDateSection.className = 'timeline-no-date';
-      noDateSection.innerHTML = '<h4>No Date Assigned</h4>';
-      const noDateList = document.createElement('div');
-      noDateList.className = 'timeline-no-date-list';
-      undatedTasks.forEach(task => {
-        noDateList.appendChild(this.createEnhancedTaskCard(task, { compact: true }));
+      const drawer = document.createElement('div');
+      drawer.className = 'tl-undated-drawer';
+      const drawerToggle = document.createElement('div');
+      drawerToggle.className = 'tl-undated-toggle';
+      drawerToggle.innerHTML = `<span class="tl-undated-arrow">&#9654;</span> No Date Assigned (${undatedTasks.length} tasks)`;
+      drawerToggle.addEventListener('click', () => {
+        drawer.classList.toggle('expanded');
+        drawerToggle.querySelector('.tl-undated-arrow').innerHTML = drawer.classList.contains('expanded') ? '&#9660;' : '&#9654;';
       });
-      noDateSection.appendChild(noDateList);
-      timeline.appendChild(noDateSection);
+      drawer.appendChild(drawerToggle);
+      const drawerList = document.createElement('div');
+      drawerList.className = 'tl-undated-list';
+      undatedTasks.forEach(task => {
+        drawerList.appendChild(this.createEnhancedTaskCard(task, { compact: true }));
+      });
+      drawer.appendChild(drawerList);
+      timeline.appendChild(drawer);
     }
 
     container.appendChild(timeline);
+
+    // Bind interactions after DOM is in place
+    this.bindTLEvents(projectId, body, tlState, dayStrs, colWidth, rowHeight, firstDayStr, lastDayStr);
+
+    // Render dependency arrows after layout
+    requestAnimationFrame(() => {
+      this.renderTLArrows(arrowSvg, chartInner, groups, dayStrs, colWidth, rowHeight, firstDayStr, lastDayStr);
+    });
+  }
+
+  renderTLTable(tableBody, groups, rowHeight) {
+    groups.forEach(group => {
+      if (group.label) {
+        const groupRow = document.createElement('div');
+        groupRow.className = 'tl-table-group-row';
+        groupRow.style.height = `${rowHeight}px`;
+        groupRow.innerHTML = `<span class="tl-group-label">${this.escapeHtml(group.label)}</span> <span class="tl-group-count">(${group.items.length})</span>`;
+        tableBody.appendChild(groupRow);
+      }
+      group.items.forEach(({ task }) => {
+        const row = document.createElement('div');
+        row.className = `tl-table-row ${task.status === 'done' ? 'tl-completed' : ''} ${this.isTaskBlocked(task) ? 'tl-blocked' : ''}`;
+        row.style.height = `${rowHeight}px`;
+        row.dataset.taskId = task.id;
+
+        const dotColor = PRIORITY_COLORS[task.priority || 'none'] || 'transparent';
+
+        row.innerHTML = `
+          <div class="tl-td tl-td-name" title="${this.escapeHtml(task.name)}">
+            <span class="tl-priority-dot" style="background:${dotColor}"></span>
+            ${this.escapeHtml(task.name)}
+          </div>
+          <div class="tl-td tl-td-assignee">${this.escapeHtml(task.assignee || '-')}</div>
+          <div class="tl-td tl-td-start">${task.startDate ? this.formatShortDate(task.startDate) : '-'}</div>
+          <div class="tl-td tl-td-end">${task.endDate ? this.formatShortDate(task.endDate) : '-'}</div>
+        `;
+        row.addEventListener('click', () => this.openDetailPanel(task.id));
+        tableBody.appendChild(row);
+      });
+    });
+  }
+
+  renderTLChart(chartInner, groups, dayStrs, colWidth, rowHeight, firstDayStr, lastDayStr) {
+    const assigneePalette = ['#6366f1', '#059669', '#0284c7', '#dc2626', '#ea580c', '#7c3aed', '#0891b2', '#be185d'];
+    const assigneeColors = {};
+    let colorIdx = 0;
+
+    let rowIndex = 0;
+    groups.forEach(group => {
+      if (group.label) {
+        // Group header takes one row of space
+        rowIndex++;
+      }
+      group.items.forEach(({ task, startStr, endStr }) => {
+        // Get color
+        const assignee = task.assignee || 'Unassigned';
+        if (!assigneeColors[assignee]) {
+          assigneeColors[assignee] = assigneePalette[colorIdx % assigneePalette.length];
+          colorIdx++;
+        }
+
+        // Calculate bar position
+        const clampedStart = startStr < firstDayStr ? firstDayStr : (startStr > lastDayStr ? lastDayStr : startStr);
+        const clampedEnd = endStr > lastDayStr ? lastDayStr : (endStr < firstDayStr ? firstDayStr : endStr);
+        const startIdx = dayStrs.indexOf(clampedStart);
+        const endIdx = dayStrs.indexOf(clampedEnd);
+
+        if (startStr > lastDayStr || endStr < firstDayStr) {
+          rowIndex++;
+          return;
+        }
+
+        const effectiveStart = startIdx >= 0 ? startIdx : 0;
+        const effectiveEnd = endIdx >= 0 ? endIdx : dayStrs.length - 1;
+
+        const barLeft = effectiveStart * colWidth;
+        const barWidth = (effectiveEnd - effectiveStart + 1) * colWidth;
+        const barTop = rowIndex * rowHeight + 8; // 8px vertical padding
+
+        const bar = document.createElement('div');
+        bar.className = `tl-gantt-bar ${task.status === 'done' ? 'tl-bar-completed' : ''} ${this.isTaskBlocked(task) ? 'tl-bar-blocked' : ''}`;
+        bar.dataset.taskId = task.id;
+        bar.style.left = `${barLeft}px`;
+        bar.style.width = `${barWidth}px`;
+        bar.style.top = `${barTop}px`;
+        bar.style.backgroundColor = assigneeColors[assignee];
+
+        bar.innerHTML = `
+          <div class="tl-bar-resize-left"></div>
+          <span class="tl-bar-label">${this.escapeHtml(task.name)}</span>
+          <div class="tl-bar-resize-right"></div>
+        `;
+
+        // Tooltip
+        const tips = [task.name];
+        if (task.assignee) tips.push(`Assignee: ${task.assignee}`);
+        if (task.startDate) tips.push(`Start: ${task.startDate}`);
+        if (task.endDate) tips.push(`End: ${task.endDate}`);
+        if (task.priority !== 'none') tips.push(`Priority: ${task.priority}`);
+        bar.title = tips.join('\n');
+
+        bar.addEventListener('click', (e) => {
+          if (!e.target.classList.contains('tl-bar-resize-left') && !e.target.classList.contains('tl-bar-resize-right')) {
+            this.openDetailPanel(task.id);
+          }
+        });
+
+        chartInner.appendChild(bar);
+        rowIndex++;
+      });
+    });
+
+    // Set chart inner height
+    chartInner.style.minHeight = `${rowIndex * rowHeight}px`;
+  }
+
+  renderTLArrows(svg, chartInner, groups, dayStrs, colWidth, rowHeight, firstDayStr, lastDayStr) {
+    // Clear existing paths
+    svg.querySelectorAll('path.tl-dep-arrow').forEach(p => p.remove());
+
+    // Build task-to-row-index map
+    const taskRowMap = {};
+    let rowIndex = 0;
+    groups.forEach(group => {
+      if (group.label) rowIndex++;
+      group.items.forEach(({ task }) => {
+        taskRowMap[task.id] = rowIndex;
+        rowIndex++;
+      });
+    });
+
+    // Set SVG height
+    const totalHeight = rowIndex * rowHeight;
+    svg.setAttribute('height', totalHeight);
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+
+    // For each task with blockedBy, draw arrows from blocker to blocked
+    groups.forEach(group => {
+      group.items.forEach(({ task, startStr }) => {
+        if (!Array.isArray(task.blockedBy) || task.blockedBy.length === 0) return;
+
+        const toRow = taskRowMap[task.id];
+        if (toRow === undefined) return;
+
+        // Target bar left edge
+        const toStart = startStr < firstDayStr ? firstDayStr : (startStr > lastDayStr ? lastDayStr : startStr);
+        const toIdx = dayStrs.indexOf(toStart);
+        if (toIdx < 0) return;
+        const toX = toIdx * colWidth;
+        const toY = toRow * rowHeight + rowHeight / 2;
+
+        task.blockedBy.forEach(blockerId => {
+          const fromRow = taskRowMap[blockerId];
+          if (fromRow === undefined) return;
+
+          // Find blocker's end date
+          const blockerInfo = null;
+          let blockerEndStr = null;
+          for (const g of groups) {
+            for (const info of g.items) {
+              if (info.task.id === blockerId) {
+                blockerEndStr = info.endStr;
+                break;
+              }
+            }
+            if (blockerEndStr) break;
+          }
+          if (!blockerEndStr) return;
+
+          const fromEnd = blockerEndStr > lastDayStr ? lastDayStr : (blockerEndStr < firstDayStr ? firstDayStr : blockerEndStr);
+          const fromIdx = dayStrs.indexOf(fromEnd);
+          if (fromIdx < 0) return;
+          const fromX = (fromIdx + 1) * colWidth;
+          const fromY = fromRow * rowHeight + rowHeight / 2;
+
+          // Draw bezier curve
+          const midX = (fromX + toX) / 2;
+          const path = document.createElementNS(svgNS, 'path');
+          path.classList.add('tl-dep-arrow');
+          path.setAttribute('d', `M${fromX},${fromY} C${midX},${fromY} ${midX},${toY} ${toX},${toY}`);
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', 'var(--text-muted)');
+          path.setAttribute('stroke-width', '1.5');
+          path.setAttribute('marker-end', 'url(#tl-arrowhead)');
+          path.dataset.from = blockerId;
+          path.dataset.to = task.id;
+          svg.appendChild(path);
+        });
+      });
+    });
+  }
+
+  formatShortDate(dateStr) {
+    if (!dateStr) return '';
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const d = new Date(dateStr + 'T12:00:00');
+    return `${monthNames[d.getMonth()]} ${d.getDate()}`;
+  }
+
+  dayToTLPixel(dateStr, dayStrs, colWidth) {
+    const idx = dayStrs.indexOf(dateStr);
+    return idx >= 0 ? idx * colWidth : -1;
+  }
+
+  pixelToTLDate(px, dayStrs, colWidth) {
+    const idx = Math.round(px / colWidth);
+    const clamped = Math.max(0, Math.min(idx, dayStrs.length - 1));
+    return dayStrs[clamped];
+  }
+
+  shiftDate(dateStr, numDays) {
+    const d = new Date(dateStr + 'T12:00:00');
+    d.setDate(d.getDate() + numDays);
+    return this.getLocalDateString(d);
+  }
+
+  bindTLEvents(projectId, body, tlState, dayStrs, colWidth, rowHeight, firstDayStr, lastDayStr) {
+    const tableBody = body.querySelector('.tl-table-body');
+    const chartBody = body.querySelector('.tl-chart-body');
+    const chartHeaderWrap = body.querySelector('.tl-chart-header-wrap');
+    const resizeHandle = body.querySelector('.tl-resize-handle');
+
+    // Scroll sync: table body ↔ chart body vertical
+    const syncScroll = (source, target, dir) => {
+      source.addEventListener('scroll', () => {
+        if (dir === 'vertical') target.scrollTop = source.scrollTop;
+        if (dir === 'horizontal') target.scrollLeft = source.scrollLeft;
+      });
+    };
+    syncScroll(tableBody, chartBody, 'vertical');
+    syncScroll(chartBody, tableBody, 'vertical');
+
+    // Chart body horizontal → chart header horizontal
+    chartBody.addEventListener('scroll', () => {
+      chartHeaderWrap.scrollLeft = chartBody.scrollLeft;
+    });
+
+    // Panel resize handle
+    let resizing = false;
+    let resizeStartX = 0;
+    let resizeStartWidth = 0;
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+      resizing = true;
+      resizeStartX = e.clientX;
+      resizeStartWidth = tlState.tableWidth;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    const onResizeMove = (e) => {
+      if (!resizing) return;
+      const delta = e.clientX - resizeStartX;
+      const newWidth = Math.max(180, Math.min(500, resizeStartWidth + delta));
+      tlState.tableWidth = newWidth;
+      body.style.setProperty('--tl-table-width', `${newWidth}px`);
+    };
+
+    const onResizeUp = () => {
+      if (!resizing) return;
+      resizing = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', onResizeMove);
+    document.addEventListener('mouseup', onResizeUp);
+
+    // Bar drag (move) and resize (edge)
+    const chartInner = chartBody.querySelector('.tl-chart-inner');
+    let dragging = null; // { taskId, type: 'move'|'resize-left'|'resize-right', startX, origLeft, origWidth, origStartDate, origEndDate }
+
+    chartInner.addEventListener('mousedown', (e) => {
+      const bar = e.target.closest('.tl-gantt-bar');
+      if (!bar) return;
+
+      const taskId = bar.dataset.taskId;
+      const task = this.findTask(taskId);
+      if (!task) return;
+
+      const rect = chartInner.getBoundingClientRect();
+      const startX = e.clientX - rect.left + chartBody.scrollLeft;
+
+      const origStartDate = task.startDate || task.scheduledDate || task.endDate || task.dueDate;
+      const origEndDate = task.endDate || task.dueDate || task.startDate || task.scheduledDate;
+
+      let type = 'move';
+      if (e.target.classList.contains('tl-bar-resize-left')) type = 'resize-left';
+      else if (e.target.classList.contains('tl-bar-resize-right')) type = 'resize-right';
+
+      dragging = {
+        taskId,
+        bar,
+        type,
+        startX,
+        origLeft: parseInt(bar.style.left),
+        origWidth: parseInt(bar.style.width),
+        origStartDate,
+        origEndDate
+      };
+
+      document.body.style.cursor = type === 'move' ? 'grabbing' : 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    const onDragMove = (e) => {
+      if (!dragging) return;
+      const rect = chartInner.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left + chartBody.scrollLeft;
+      const delta = mouseX - dragging.startX;
+
+      if (dragging.type === 'move') {
+        const newLeft = Math.max(0, dragging.origLeft + delta);
+        dragging.bar.style.left = `${newLeft}px`;
+      } else if (dragging.type === 'resize-left') {
+        const newLeft = Math.max(0, dragging.origLeft + delta);
+        const newWidth = dragging.origWidth - delta;
+        if (newWidth >= colWidth) {
+          dragging.bar.style.left = `${newLeft}px`;
+          dragging.bar.style.width = `${newWidth}px`;
+        }
+      } else if (dragging.type === 'resize-right') {
+        const newWidth = Math.max(colWidth, dragging.origWidth + delta);
+        dragging.bar.style.width = `${newWidth}px`;
+      }
+    };
+
+    const onDragUp = (e) => {
+      if (!dragging) return;
+
+      const rect = chartInner.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left + chartBody.scrollLeft;
+      const delta = mouseX - dragging.startX;
+
+      const task = this.findTask(dragging.taskId);
+      if (task && Math.abs(delta) > 5) {
+        if (dragging.type === 'move') {
+          const dayShift = Math.round(delta / colWidth);
+          if (dayShift !== 0) {
+            const updates = {};
+            if (task.startDate) updates.startDate = this.shiftDate(task.startDate, dayShift);
+            if (task.endDate) updates.endDate = this.shiftDate(task.endDate, dayShift);
+            if (task.scheduledDate) updates.scheduledDate = this.shiftDate(task.scheduledDate, dayShift);
+            if (task.dueDate) updates.dueDate = this.shiftDate(task.dueDate, dayShift);
+            this.updateTask(dragging.taskId, updates);
+          }
+        } else if (dragging.type === 'resize-left') {
+          const newLeft = Math.max(0, dragging.origLeft + delta);
+          const newDate = this.pixelToTLDate(newLeft, dayStrs, colWidth);
+          if (newDate && task.startDate) {
+            this.updateTask(dragging.taskId, { startDate: newDate });
+          } else if (newDate && task.scheduledDate) {
+            this.updateTask(dragging.taskId, { scheduledDate: newDate });
+          }
+        } else if (dragging.type === 'resize-right') {
+          const newRight = dragging.origLeft + Math.max(colWidth, dragging.origWidth + delta);
+          const newDate = this.pixelToTLDate(newRight - 1, dayStrs, colWidth);
+          if (newDate && task.endDate) {
+            this.updateTask(dragging.taskId, { endDate: newDate });
+          } else if (newDate && task.dueDate) {
+            this.updateTask(dragging.taskId, { dueDate: newDate });
+          }
+        }
+        this.renderProjectView();
+      }
+
+      dragging = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragUp);
+
+    // Highlight arrows on bar hover
+    chartInner.addEventListener('mouseover', (e) => {
+      const bar = e.target.closest('.tl-gantt-bar');
+      if (!bar) return;
+      const taskId = bar.dataset.taskId;
+      chartInner.querySelectorAll('.tl-dep-arrow').forEach(path => {
+        if (path.dataset.from === taskId || path.dataset.to === taskId) {
+          path.classList.add('tl-arrow-highlight');
+        }
+      });
+    });
+
+    chartInner.addEventListener('mouseout', (e) => {
+      const bar = e.target.closest('.tl-gantt-bar');
+      if (!bar) return;
+      chartInner.querySelectorAll('.tl-dep-arrow.tl-arrow-highlight').forEach(path => {
+        path.classList.remove('tl-arrow-highlight');
+      });
+    });
+
+    // Clean up on next render
+    this._tlCleanup = () => {
+      document.removeEventListener('mousemove', onResizeMove);
+      document.removeEventListener('mouseup', onResizeUp);
+      document.removeEventListener('mousemove', onDragMove);
+      document.removeEventListener('mouseup', onDragUp);
+    };
   }
 
   groupTasksBy(tasks, groupBy) {
@@ -10676,8 +12975,7 @@ class TaskFlowApp {
         case 'priority':
           key = task.priority || 'none';
           label = key.charAt(0).toUpperCase() + key.slice(1);
-          const priorityColors = { urgent: '#dc2626', high: '#f97316', medium: '#eab308', low: '#22c55e', none: '#9ca3af' };
-          color = priorityColors[key];
+          color = PRIORITY_COLORS[key] || '#9ca3af';
           break;
 
         case 'status':
@@ -10955,263 +13253,6 @@ class TaskFlowApp {
     }
   }
 
-  // --- Notion Sync Methods ---
-
-  async loadNotionConfig() {
-    try {
-      const config = await window.api.notionGetConfig();
-      const syncBtn = document.getElementById('sidebar-notion-sync-btn');
-      if (config.connected) {
-        syncBtn.style.display = '';
-        // Update settings modal if open
-        const disconnected = document.getElementById('notion-disconnected');
-        const connected = document.getElementById('notion-connected');
-        if (disconnected) disconnected.style.display = 'none';
-        if (connected) connected.style.display = '';
-        const lastSync = document.getElementById('notion-last-sync');
-        const sidebarLastSync = document.getElementById('sidebar-last-sync');
-        if (config.lastSyncAt) {
-          const d = new Date(config.lastSyncAt);
-          const timeStr = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-          if (lastSync) lastSync.textContent = `Last sync: ${d.toLocaleDateString()} ${timeStr}`;
-          if (sidebarLastSync) sidebarLastSync.textContent = `Last: ${timeStr}`;
-        } else {
-          if (lastSync) lastSync.textContent = 'Never synced';
-          if (sidebarLastSync) sidebarLastSync.textContent = '';
-        }
-      } else {
-        syncBtn.style.display = 'none';
-        const disconnected = document.getElementById('notion-disconnected');
-        const connected = document.getElementById('notion-connected');
-        if (disconnected) disconnected.style.display = '';
-        if (connected) connected.style.display = 'none';
-      }
-    } catch (err) {
-      console.error('Failed to load Notion config:', err);
-    }
-  }
-
-  openNotionSetup() {
-    this.closeModal('settings-modal');
-    // Reset steps
-    document.querySelectorAll('.notion-step').forEach(step => {
-      step.classList.remove('active', 'complete');
-    });
-    const step1 = document.querySelector('.notion-step[data-step="1"]');
-    if (step1) step1.classList.add('active');
-    document.getElementById('notion-api-key').value = '';
-    document.getElementById('notion-page-url').value = '';
-    document.getElementById('notion-test-result').textContent = '';
-    document.getElementById('notion-test-result').className = 'notion-test-result';
-    document.getElementById('notion-setup-status').textContent = '';
-    document.getElementById('notion-setup-status').className = 'notion-test-result';
-    document.getElementById('notion-step2-next').disabled = true;
-    this.openModal('notion-setup-modal');
-  }
-
-  notionSetupGoToStep(stepNum) {
-    document.querySelectorAll('.notion-step').forEach(step => {
-      const s = parseInt(step.dataset.step);
-      if (s < stepNum) {
-        step.classList.remove('active');
-        step.classList.add('complete');
-      } else if (s === stepNum) {
-        step.classList.remove('complete');
-        step.classList.add('active');
-      } else {
-        step.classList.remove('active', 'complete');
-      }
-    });
-  }
-
-  async notionTestConnection() {
-    const apiKey = document.getElementById('notion-api-key').value.trim();
-    if (!apiKey) return;
-
-    const resultEl = document.getElementById('notion-test-result');
-    resultEl.textContent = 'Testing connection...';
-    resultEl.className = 'notion-test-result loading';
-
-    const result = await window.api.notionTestConnection(apiKey);
-    if (result.success) {
-      resultEl.textContent = `Connected as ${result.name}`;
-      resultEl.className = 'notion-test-result success';
-      document.getElementById('notion-step2-next').disabled = false;
-    } else {
-      resultEl.textContent = result.error;
-      resultEl.className = 'notion-test-result error';
-      document.getElementById('notion-step2-next').disabled = true;
-    }
-  }
-
-  _extractNotionPageId(url) {
-    // Notion URLs: https://www.notion.so/Page-Name-<32 hex chars>
-    // or https://www.notion.so/<32 hex chars>
-    // or just the raw ID with dashes
-    const cleaned = url.trim().replace(/\?.*$/, '').replace(/#.*$/, '');
-    // Try to extract 32 hex chars from the end
-    const match = cleaned.match(/([a-f0-9]{32})\/?$/i) || cleaned.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\/?$/i);
-    if (match) {
-      // Return as dashed UUID format
-      const hex = match[1].replace(/-/g, '');
-      return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
-    }
-    return null;
-  }
-
-  async notionCreateAndSync() {
-    const apiKey = document.getElementById('notion-api-key').value.trim();
-    const pageUrl = document.getElementById('notion-page-url').value.trim();
-    const statusEl = document.getElementById('notion-setup-status');
-
-    if (!apiKey || !pageUrl) {
-      statusEl.textContent = 'Please fill in all fields.';
-      statusEl.className = 'notion-test-result error';
-      return;
-    }
-
-    const parentPageId = this._extractNotionPageId(pageUrl);
-    if (!parentPageId) {
-      statusEl.textContent = 'Could not extract page ID from URL. Copy the full Notion page URL.';
-      statusEl.className = 'notion-test-result error';
-      return;
-    }
-
-    statusEl.textContent = 'Creating database...';
-    statusEl.className = 'notion-test-result loading';
-
-    // 1. Create database
-    const setupResult = await window.api.notionSetup({ apiKey, parentPageId });
-    if (!setupResult.success) {
-      statusEl.textContent = `Failed: ${setupResult.error}`;
-      statusEl.className = 'notion-test-result error';
-      return;
-    }
-
-    // 2. Save config
-    await window.api.notionSaveConfig({
-      apiKey,
-      parentPageId,
-      databaseId: setupResult.databaseId,
-      idMap: {},
-    });
-
-    // 3. Run initial sync (push all local tasks)
-    statusEl.textContent = 'Syncing tasks...';
-    const syncResult = await window.api.notionSync();
-    if (syncResult.success) {
-      const s = syncResult.summary;
-      statusEl.textContent = `Done! ${s.created} pushed, ${s.pulled || 0} pulled.`;
-      statusEl.className = 'notion-test-result success';
-
-      // Reload data in case new tasks were pulled
-      this.data = await window.api.loadData();
-
-      // Close modal after brief delay
-      setTimeout(() => {
-        this.closeModal('notion-setup-modal');
-        this.loadNotionConfig();
-        this.showToast('Notion connected and synced!');
-        this.render();
-      }, 1500);
-    } else {
-      statusEl.textContent = `Sync failed: ${syncResult.error}`;
-      statusEl.className = 'notion-test-result error';
-    }
-  }
-
-  async triggerNotionSync() {
-    if (this._notionSyncing) return;
-    this._notionSyncing = true;
-    const syncBtn = document.getElementById('sidebar-notion-sync-btn');
-    if (syncBtn) syncBtn.classList.add('syncing');
-
-    // Also disable settings sync button
-    const settingsSyncBtn = document.getElementById('notion-sync-btn');
-    if (settingsSyncBtn) {
-      settingsSyncBtn.disabled = true;
-      settingsSyncBtn.textContent = 'Syncing...';
-    }
-
-    try {
-      const result = await window.api.notionSync();
-      if (result.success) {
-        const s = result.summary;
-        const parts = [];
-        if (s.created) parts.push(`${s.created} pushed`);
-        if (s.pulled) parts.push(`${s.pulled} pulled`);
-        if (s.updated) parts.push(`${s.updated} updated`);
-        if (s.deleted) parts.push(`${s.deleted} deleted`);
-        const msg = parts.length > 0 ? `Synced: ${parts.join(', ')}` : 'Everything up to date';
-        this.showToast(msg, 3000);
-
-        if (s.errors && s.errors.length > 0) {
-          console.warn('Sync errors:', s.errors);
-        }
-
-        // Reload data in case tasks were pulled from Notion
-        this.data = await window.api.loadData();
-        this.render();
-      } else {
-        this.showToast(`Sync failed: ${result.error}`, 4000);
-      }
-    } catch (err) {
-      this.showToast(`Sync error: ${err.message}`, 4000);
-    } finally {
-      this._notionSyncing = false;
-      if (syncBtn) syncBtn.classList.remove('syncing');
-      if (settingsSyncBtn) {
-        settingsSyncBtn.disabled = false;
-        settingsSyncBtn.textContent = 'Sync Now';
-      }
-      this.loadNotionConfig();
-    }
-  }
-
-  startNotionAutoSync() {
-    // Auto-sync every 5 minutes if connected
-    this._notionAutoSyncInterval = setInterval(async () => {
-      const config = await window.api.notionGetConfig();
-      if (!config.connected) return;
-      if (this._notionSyncing) return; // Skip if already syncing
-
-      this._notionSyncing = true;
-      try {
-        const result = await window.api.notionSync();
-        if (result.success) {
-          const s = result.summary;
-          const hasChanges = s.created || s.pulled || s.updated || s.deleted;
-          if (hasChanges) {
-            const parts = [];
-            if (s.created) parts.push(`${s.created} pushed`);
-            if (s.pulled) parts.push(`${s.pulled} pulled`);
-            if (s.updated) parts.push(`${s.updated} updated`);
-            if (s.deleted) parts.push(`${s.deleted} deleted`);
-            this.showToast(`Auto-synced: ${parts.join(', ')}`, 3000);
-            this.data = await window.api.loadData();
-            this.render();
-          }
-          this.loadNotionConfig();
-        }
-      } catch (err) {
-        console.error('Auto-sync error:', err);
-      } finally {
-        this._notionSyncing = false;
-      }
-    }, 5 * 60 * 1000); // 5 minutes
-  }
-
-  async disconnectNotion() {
-    await window.api.notionSaveConfig({
-      apiKey: null,
-      databaseId: null,
-      parentPageId: null,
-      lastSyncAt: null,
-      idMap: null,
-    });
-    this.loadNotionConfig();
-    this.showToast('Notion disconnected');
-  }
 }
 
 // Initialize drag and drop for board view

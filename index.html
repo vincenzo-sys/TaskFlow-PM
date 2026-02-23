@@ -43,6 +43,10 @@
             <span class="nav-icon">&#10003;</span>
             <span>Completed</span>
           </button>
+          <button class="nav-item" data-view="claude">
+            <span class="nav-icon">&#129302;</span>
+            <span>Claude</span>
+          </button>
         </div>
 
         <div class="nav-section">
@@ -82,12 +86,7 @@
           <span class="nav-icon">&#129302;</span>
           <span>Run Queue</span>
         </button>
-        <button class="nav-item notion-sync-nav" id="sidebar-notion-sync-btn" title="Sync with Notion" style="display:none;">
-          <span class="nav-icon">&#128260;</span>
-          <span>Sync</span>
-          <span class="notion-sidebar-last-sync" id="sidebar-last-sync"></span>
-        </button>
-        <button class="nav-item" id="settings-btn">
+<button class="nav-item" id="settings-btn">
           <span class="nav-icon">&#9881;</span>
           <span>Settings</span>
         </button>
@@ -233,6 +232,9 @@
           </div>
         </div>
 
+        <!-- Claude Integration View -->
+        <div id="claude-view" class="task-view claude-view"></div>
+
         <!-- Calendar / Upcoming View -->
         <div id="calendar-view" class="task-view calendar-view">
           <div class="calendar-toolbar">
@@ -300,6 +302,30 @@
               <!-- Unscheduled tasks for the day -->
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Persistent Status Bar -->
+      <div class="status-bar" id="status-bar">
+        <div class="status-bar-left">
+          <span class="status-bar-current" id="status-bar-current">
+            <span class="status-dot"></span>
+            <span class="status-task-name">No active task</span>
+          </span>
+          <span class="status-bar-divider"></span>
+          <span class="status-bar-next" id="status-bar-next">
+            <span class="status-next-label">Next:</span>
+            <span class="status-next-name">--</span>
+          </span>
+        </div>
+        <div class="status-bar-right">
+          <span class="status-bar-count" id="status-bar-count">0 tasks today</span>
+          <span class="status-bar-divider"></span>
+          <span class="status-bar-shortcuts">
+            <kbd>Ctrl+K</kbd> Search
+            <kbd>N</kbd> New
+            <kbd>F</kbd> Focus
+          </span>
         </div>
       </div>
     </main>
@@ -672,6 +698,30 @@
           </div>
         </div>
 
+        <!-- Timeline Section -->
+        <div class="form-section">
+          <div class="form-section-header">
+            <span class="form-section-title">Timeline</span>
+            <span class="form-section-hint">For Gantt chart view</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="task-start-date">Start Date</label>
+              <input type="date" id="task-start-date">
+            </div>
+            <div class="form-group">
+              <label for="task-end-date">End Date</label>
+              <input type="date" id="task-end-date">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="task-assignee">Assignee</label>
+            <select id="task-assignee">
+              <option value="">Unassigned</option>
+            </select>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>Tags</label>
           <div class="tags-selector" id="tags-selector"></div>
@@ -719,6 +769,15 @@
           <label for="project-goal">Goal / Purpose</label>
           <textarea id="project-goal" rows="2" placeholder="Why does this matter? What's the end vision?"></textarea>
           <span class="form-hint">This keeps you focused on the bigger picture</span>
+        </div>
+
+        <div class="form-group">
+          <label for="project-working-dir">Working Directory</label>
+          <div class="form-row" style="gap: 8px;">
+            <input type="text" id="project-working-dir" placeholder="Path where Claude sessions will run" style="flex: 1;">
+            <button type="button" class="btn btn-secondary" id="project-browse-dir">Browse</button>
+          </div>
+          <span class="form-hint">Claude sessions launch here. A CLAUDE.md file will be auto-generated.</span>
         </div>
 
         <div class="form-row">
@@ -831,89 +890,18 @@
           </div>
         </div>
         <div class="settings-section">
-          <h4>Notion Sync</h4>
-          <div id="notion-settings-content">
-            <!-- Not connected state (default) -->
-            <div id="notion-disconnected">
-              <p class="settings-text">Sync tasks with Notion to capture on mobile.</p>
-              <button class="btn btn-primary" id="notion-connect-btn">Connect to Notion</button>
-            </div>
-            <!-- Connected state -->
-            <div id="notion-connected" style="display:none;">
-              <div class="notion-status-row">
-                <span class="notion-status-dot"></span>
-                <span>Connected</span>
-                <span class="notion-last-sync" id="notion-last-sync"></span>
-              </div>
-              <div class="settings-row" style="margin-top:8px;">
-                <button class="btn btn-primary" id="notion-sync-btn">Sync Now</button>
-                <button class="btn btn-secondary btn-danger-text" id="notion-disconnect-btn">Disconnect</button>
-              </div>
-            </div>
+          <h4>Team Members</h4>
+          <p class="settings-text">Names available for task assignment in timeline view.</p>
+          <div id="team-members-list" class="team-members-list"></div>
+          <div class="team-member-add-row">
+            <input type="text" id="team-member-input" placeholder="Add team member..." class="team-member-input">
+            <button class="btn btn-secondary btn-small" id="add-team-member-btn">Add</button>
           </div>
         </div>
         <div class="settings-section">
           <h4>About</h4>
           <p class="settings-text">TaskFlow PM v1.0.0</p>
           <p class="settings-text">A powerful to-do list with project management features.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Notion Setup Modal -->
-  <div class="modal" id="notion-setup-modal">
-    <div class="modal-content notion-setup-content">
-      <div class="modal-header">
-        <h3>Connect to Notion</h3>
-        <button class="btn-icon modal-close" data-modal="notion-setup-modal">&#10005;</button>
-      </div>
-      <div class="modal-body">
-        <div class="notion-setup-steps">
-          <div class="notion-step active" data-step="1">
-            <div class="notion-step-indicator">1</div>
-            <div class="notion-step-content">
-              <h4>Create a Notion Integration</h4>
-              <ol class="notion-instructions">
-                <li>Go to <a href="#" id="notion-integrations-link">notion.so/my-integrations</a></li>
-                <li>Click <strong>"New integration"</strong></li>
-                <li>Name it <strong>"TaskFlow PM"</strong></li>
-                <li>Select your workspace and click <strong>"Submit"</strong></li>
-                <li>Copy the <strong>Internal Integration Secret</strong></li>
-              </ol>
-              <button class="btn btn-primary" id="notion-step1-next">I've created the integration</button>
-            </div>
-          </div>
-
-          <div class="notion-step" data-step="2">
-            <div class="notion-step-indicator">2</div>
-            <div class="notion-step-content">
-              <h4>Paste Your API Key</h4>
-              <div class="notion-input-row">
-                <input type="password" id="notion-api-key" class="notion-input" placeholder="secret_..." autocomplete="off">
-                <button class="btn btn-secondary" id="notion-test-btn">Test</button>
-              </div>
-              <div id="notion-test-result" class="notion-test-result"></div>
-              <button class="btn btn-primary" id="notion-step2-next" disabled>Next</button>
-            </div>
-          </div>
-
-          <div class="notion-step" data-step="3">
-            <div class="notion-step-indicator">3</div>
-            <div class="notion-step-content">
-              <h4>Choose a Parent Page</h4>
-              <ol class="notion-instructions">
-                <li>In Notion, create or pick a page where the database will live</li>
-                <li>Click <strong>"..." menu</strong> on that page, then <strong>"Connections" > "TaskFlow PM"</strong></li>
-                <li>Copy the <strong>page URL</strong> and paste it below</li>
-              </ol>
-              <div class="notion-input-row">
-                <input type="text" id="notion-page-url" class="notion-input" placeholder="https://www.notion.so/your-page-id..." autocomplete="off">
-              </div>
-              <button class="btn btn-primary" id="notion-create-db-btn">Create Database & Sync</button>
-              <div id="notion-setup-status" class="notion-test-result"></div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
