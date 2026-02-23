@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Focus Timer</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      background: transparent;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .focus-pill {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 18px 12px 14px;
+      background: rgba(26, 26, 36, 0.95);
+      backdrop-filter: blur(20px);
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      cursor: default;
+      -webkit-app-region: drag;
+    }
+
+    .focus-pill * {
+      -webkit-app-region: no-drag;
+    }
+
+    .pill-glow {
+      position: absolute;
+      inset: -2px;
+      background: linear-gradient(135deg, rgba(249, 115, 22, 0.3), rgba(139, 92, 246, 0.3));
+      border-radius: 22px;
+      opacity: 0;
+      filter: blur(12px);
+      transition: opacity 0.3s ease;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .focus-pill.running .pill-glow {
+      opacity: 1;
+      animation: glowPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 0.8; }
+    }
+
+    .timer-ring {
+      position: relative;
+      width: 48px;
+      height: 48px;
+      flex-shrink: 0;
+    }
+
+    .timer-ring svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    .ring-bg {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.1);
+      stroke-width: 3;
+    }
+
+    .ring-progress {
+      fill: none;
+      stroke: #f97316;
+      stroke-width: 3;
+      stroke-linecap: round;
+      stroke-dasharray: 113;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 1s linear;
+    }
+
+    .focus-pill.break .ring-progress {
+      stroke: #22c55e;
+    }
+
+    .timer-time {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pill-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .pill-task {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 8px;
+      max-width: 180px;
+    }
+
+    .pill-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .pill-btn {
+      width: 32px;
+      height: 32px;
+      border: none;
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.6);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pill-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+      transform: scale(1.1);
+    }
+
+    .pill-complete:hover {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+
+    .pill-btn .pause-icon {
+      display: none;
+    }
+
+    .focus-pill.running .pill-play .play-icon {
+      display: none;
+    }
+
+    .focus-pill.running .pill-play .pause-icon {
+      display: block;
+    }
+
+    .focus-pill.break .pill-glow {
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(139, 92, 246, 0.3));
+    }
+  </style>
+</head>
+<body>
+  <div class="focus-pill" id="focus-pill">
+    <div class="pill-glow"></div>
+    <div class="timer-ring">
+      <svg viewBox="0 0 40 40">
+        <circle class="ring-bg" cx="20" cy="20" r="18"></circle>
+        <circle class="ring-progress" id="ring-progress" cx="20" cy="20" r="18"></circle>
+      </svg>
+      <span class="timer-time" id="timer-time">25:00</span>
+    </div>
+    <div class="pill-info">
+      <span class="pill-task" id="pill-task">Current task</span>
+      <div class="pill-actions">
+        <button class="pill-btn pill-complete" id="pill-complete" title="Complete">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </button>
+        <button class="pill-btn pill-play" id="pill-timer-toggle" title="Play/Pause">
+          <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <svg class="pause-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
+          </svg>
+        </button>
+        <button class="pill-btn pill-expand" id="pill-expand" title="Expand">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+        </button>
+        <button class="pill-btn pill-close" id="pill-close" title="Close">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const pill = document.getElementById('focus-pill');
+    const taskEl = document.getElementById('pill-task');
+    const timeEl = document.getElementById('timer-time');
+    const progressEl = document.getElementById('ring-progress');
+
+    // Update from main window
+    window.pillApi.onUpdate((data) => {
+      if (data.taskName) taskEl.textContent = data.taskName;
+      if (data.time) timeEl.textContent = data.time;
+      if (data.progress !== undefined) {
+        const circumference = 2 * Math.PI * 18;
+        progressEl.style.strokeDashoffset = circumference * (1 - data.progress);
+      }
+      pill.classList.toggle('running', data.running);
+      pill.classList.toggle('break', data.isBreak);
+    });
+
+    // Request initial state when window loads
+    window.pillApi.action('request-state');
+
+    // Button actions
+    document.getElementById('pill-complete').addEventListener('click', () => {
+      window.pillApi.action('complete');
+    });
+
+    document.getElementById('pill-timer-toggle').addEventListener('click', () => {
+      window.pillApi.action('toggle-timer');
+    });
+
+    document.getElementById('pill-expand').addEventListener('click', () => {
+      window.pillApi.action('expand');
+    });
+
+    document.getElementById('pill-close').addEventListener('click', () => {
+      window.pillApi.action('close');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>TaskFlow PM</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1 class="app-title">TaskFlow</h1>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <button class="nav-item active" data-view="today">
+            <span class="nav-icon">&#9889;</span>
+            <span>Today</span>
+            <span class="nav-count" id="today-count">0</span>
+          </button>
+          <button class="nav-item" data-view="inbox">
+            <span class="nav-icon">&#128229;</span>
+            <span>Inbox</span>
+            <span class="nav-count" id="inbox-count">0</span>
+          </button>
+          <button class="nav-item" data-view="master-list">
+            <span class="nav-icon">&#128220;</span>
+            <span>Master List</span>
+          </button>
+          <button class="nav-item" data-view="dashboard">
+            <span class="nav-icon">&#128202;</span>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-item" data-view="calendar">
+            <span class="nav-icon">&#128197;</span>
+            <span>Upcoming</span>
+          </button>
+          <button class="nav-item" data-view="recaps">
+            <span class="nav-icon">&#10003;</span>
+            <span>Completed</span>
+          </button>
+          <button class="nav-item" data-view="claude">
+            <span class="nav-icon">&#129302;</span>
+            <span>Claude</span>
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-header">
+            <span>Claude Queue</span>
+          </div>
+          <div class="sidebar-queue-buttons">
+            <button class="btn btn-small btn-secondary" id="sidebar-open-queue" title="Open queue file">📝 Open</button>
+            <button class="btn btn-small btn-primary" id="sidebar-run-queue" title="Run Claude queue">▶️ Run</button>
+          </div>
+        </div>
+
+        <div class="nav-section nav-section-projects">
+          <div class="nav-section-header">
+            <span>Projects</span>
+            <button class="btn-icon" id="search-projects-btn" title="Search Projects">&#128269;</button>
+            <button class="btn-icon" id="add-project-btn" title="Add Project">+</button>
+          </div>
+          <div class="project-search-bar hidden" id="project-search-bar">
+            <input type="text" id="project-search-input" placeholder="Search projects...">
+          </div>
+          <div id="sidebar-favorites" class="sidebar-favorites"></div>
+          <div id="categories-tree" class="categories-tree"></div>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-header">
+            <span>Tags</span>
+            <button class="btn-icon" id="add-tag-btn" title="Add Tag">+</button>
+          </div>
+          <div id="tags-list" class="tags-list"></div>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="nav-item" id="run-queue-btn" title="Run Claude Queue">
+          <span class="nav-icon">&#129302;</span>
+          <span>Run Queue</span>
+        </button>
+<button class="nav-item" id="settings-btn">
+          <span class="nav-icon">&#9881;</span>
+          <span>Settings</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="main-header">
+        <div class="header-left">
+          <h2 class="view-title" id="view-title">Inbox</h2>
+          <span class="view-subtitle" id="view-subtitle"></span>
+        </div>
+        <div class="header-right">
+          <button class="btn btn-ghost" id="mcp-tools-btn" title="View MCP Tools">
+            <span>🔧</span>
+            <span>MCP Tools</span>
+          </button>
+          <button class="btn btn-shortcut" id="floating-bar-btn" title="Toggle floating task bar">
+            <span>📌</span>
+          </button>
+          <button class="btn btn-focus" id="focus-mode-btn" title="Focus Mode (F)">
+            <span class="focus-icon">&#9678;</span>
+            <span>Focus</span>
+          </button>
+          <div class="search-box">
+            <input type="text" id="search-input" placeholder="Search tasks...">
+          </div>
+          <div class="view-options">
+            <button class="btn-icon view-btn active" data-view-mode="list" title="List View">&#9776;</button>
+            <button class="btn-icon view-btn" data-view-mode="board" title="Board View">&#9638;</button>
+          </div>
+          <select id="sort-select" class="sort-select">
+            <option value="created">Date Created</option>
+            <option value="dueDate">Due Date</option>
+            <option value="priority">Priority</option>
+            <option value="name">Name</option>
+          </select>
+          <select id="filter-status" class="filter-select">
+            <option value="all">All Status</option>
+            <option value="todo">To Do</option>
+            <option value="ready">Ready</option>
+            <option value="in-progress">In Progress</option>
+            <option value="waiting">Waiting</option>
+            <option value="done">Done</option>
+          </select>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <!-- Today View - Focused Task Queue -->
+        <div id="command-center-view" class="task-view today-view">
+          <div class="today-container">
+            <!-- Auto-Roll Banner -->
+            <div class="today-roll-banner hidden" id="today-roll-banner">
+              <span class="roll-banner-text" id="roll-banner-text"></span>
+              <button class="roll-banner-dismiss" id="roll-banner-dismiss">Dismiss</button>
+            </div>
+
+            <!-- Active Tasks Section -->
+            <div class="today-working-now" id="today-working-now">
+              <div class="working-now-header">
+                <span class="working-now-label">Active</span>
+                <button class="working-now-clear" id="working-now-clear" title="Clear all">×</button>
+              </div>
+              <div class="working-now-task" id="working-now-task">
+                <span class="working-now-empty">Click the focus button on any task below</span>
+              </div>
+              <!-- Task-specific Notes (shown when task is active) -->
+              <div class="working-now-notes hidden" id="working-now-notes">
+                <textarea class="working-now-notes-input" id="working-now-notes-input" placeholder="Notes for this task..."></textarea>
+              </div>
+            </div>
+
+            <!-- Up Next Queue -->
+            <div class="today-up-next" id="today-up-next">
+              <div class="up-next-header">
+                <span class="up-next-label">Up Next</span>
+                <button class="btn btn-small btn-coach" id="coach-me-btn" title="Copy coaching prompt for Claude">Coach Me</button>
+                <button class="btn btn-small btn-plan-day" id="plan-my-day-btn" title="Copy Plan My Day prompt for Claude">Plan My Day</button>
+              </div>
+              <div class="up-next-tasks" id="up-next-tasks"></div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="today-empty hidden" id="today-empty-state">
+              <div class="today-empty-icon">&#10024;</div>
+              <p class="today-empty-title">Your day is clear!</p>
+              <p class="today-empty-subtitle">Add tasks from the Master List or create new ones</p>
+              <button class="btn btn-primary" id="today-add-tasks">Add Tasks</button>
+            </div>
+
+            <!-- Daily Notes (persists for recaps) -->
+            <div class="today-daily-notes" id="today-daily-notes">
+              <div class="daily-notes-header">
+                <span class="daily-notes-label">Daily Notes</span>
+                <span class="daily-notes-hint">For recaps</span>
+              </div>
+              <textarea class="daily-notes-input" id="today-daily-notes-input" placeholder="Thoughts, accomplishments, learnings for today..."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Task List View -->
+        <div id="task-list-view" class="task-view active">
+          <div class="add-task-inline">
+            <button class="btn-add-task" id="quick-add-btn">
+              <span>+</span> Add Task
+            </button>
+          </div>
+          <div id="tasks-container" class="tasks-container"></div>
+        </div>
+
+        <!-- Board View -->
+        <div id="task-board-view" class="task-view board-view">
+          <div class="board-column" data-status="todo">
+            <div class="column-header">
+              <h3>To Do</h3>
+              <span class="column-count">0</span>
+            </div>
+            <div class="column-tasks" data-status="todo"></div>
+          </div>
+          <div class="board-column" data-status="in-progress">
+            <div class="column-header">
+              <h3>In Progress</h3>
+              <span class="column-count">0</span>
+            </div>
+            <div class="column-tasks" data-status="in-progress"></div>
+          </div>
+          <div class="board-column" data-status="review">
+            <div class="column-header">
+              <h3>Review</h3>
+              <span class="column-count">0</span>
+            </div>
+            <div class="column-tasks" data-status="review"></div>
+          </div>
+          <div class="board-column" data-status="done">
+            <div class="column-header">
+              <h3>Done</h3>
+              <span class="column-count">0</span>
+            </div>
+            <div class="column-tasks" data-status="done"></div>
+          </div>
+        </div>
+
+        <!-- Claude Integration View -->
+        <div id="claude-view" class="task-view claude-view"></div>
+
+        <!-- Calendar / Upcoming View -->
+        <div id="calendar-view" class="task-view calendar-view">
+          <div class="calendar-toolbar">
+            <!-- View Mode Toggle -->
+            <div class="calendar-view-toggle">
+              <button class="calendar-view-btn active" data-calendar-view="month">Month</button>
+              <button class="calendar-view-btn" data-calendar-view="week">Week</button>
+              <button class="calendar-view-btn" data-calendar-view="day">Day</button>
+            </div>
+            <!-- Navigation -->
+            <div class="calendar-nav">
+              <button class="calendar-nav-btn" id="calendar-prev">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+              </button>
+              <h3 class="calendar-title" id="calendar-month">January 2025</h3>
+              <button class="calendar-nav-btn" id="calendar-next">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            </div>
+            <button class="btn btn-secondary" id="calendar-today">Today</button>
+          </div>
+
+          <!-- Month View -->
+          <div class="calendar-month-view" id="calendar-month-view">
+            <div class="calendar-weekdays">
+              <span>Sun</span>
+              <span>Mon</span>
+              <span>Tue</span>
+              <span>Wed</span>
+              <span>Thu</span>
+              <span>Fri</span>
+              <span>Sat</span>
+            </div>
+            <div class="calendar-grid" id="calendar-grid"></div>
+            <div class="calendar-detail" id="calendar-detail">
+              <div class="detail-placeholder">
+                <p>Click on a day to see tasks and accomplishments</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Week View -->
+          <div class="calendar-week-view hidden" id="calendar-week-view">
+            <div class="week-header" id="week-header">
+              <!-- Day columns render here -->
+            </div>
+            <div class="week-grid" id="week-grid">
+              <!-- Time slots and tasks render here -->
+            </div>
+          </div>
+
+          <!-- Day View -->
+          <div class="calendar-day-view hidden" id="calendar-day-view">
+            <div class="day-header" id="day-header">
+              <!-- Day info renders here -->
+            </div>
+            <div class="day-timeline" id="day-timeline">
+              <!-- Time slots render here -->
+            </div>
+            <div class="day-unscheduled" id="day-unscheduled">
+              <!-- Unscheduled tasks for the day -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Persistent Status Bar -->
+      <div class="status-bar" id="status-bar">
+        <div class="status-bar-left">
+          <span class="status-bar-current" id="status-bar-current">
+            <span class="status-dot"></span>
+            <span class="status-task-name">No active task</span>
+          </span>
+          <span class="status-bar-divider"></span>
+          <span class="status-bar-next" id="status-bar-next">
+            <span class="status-next-label">Next:</span>
+            <span class="status-next-name">--</span>
+          </span>
+        </div>
+        <div class="status-bar-right">
+          <span class="status-bar-count" id="status-bar-count">0 tasks today</span>
+          <span class="status-bar-divider"></span>
+          <span class="status-bar-shortcuts">
+            <kbd>Ctrl+K</kbd> Search
+            <kbd>N</kbd> New
+            <kbd>F</kbd> Focus
+          </span>
+        </div>
+      </div>
+    </main>
+
+    <!-- Task Detail Panel -->
+    <aside class="detail-panel" id="detail-panel">
+      <div class="detail-header">
+        <h3>Task Details</h3>
+        <button class="btn-icon" id="close-detail">&#10005;</button>
+      </div>
+      <div class="detail-content" id="detail-content"></div>
+    </aside>
+  </div>
+
+  <!-- Focus Mode Overlay -->
+  <div class="focus-mode" id="focus-mode" tabindex="-1">
+    <!-- Ambient Background -->
+    <div class="focus-ambient">
+      <div class="ambient-orb ambient-orb-1"></div>
+      <div class="ambient-orb ambient-orb-2"></div>
+      <div class="ambient-orb ambient-orb-3"></div>
+    </div>
+
+    <!-- Header -->
+    <div class="focus-header">
+      <div class="focus-streak">
+        <div class="streak-flame">&#128293;</div>
+        <div class="streak-info">
+          <span class="streak-count" id="focus-streak-count">0</span>
+          <span class="streak-label">streak</span>
+        </div>
+      </div>
+      <div class="focus-session-stats" id="focus-session-stats">
+        <div class="focus-stat">
+          <span class="stat-value" id="focus-completed-count">0</span>
+          <span class="stat-label">done</span>
+        </div>
+        <div class="focus-stat">
+          <span class="stat-value" id="focus-pomodoro-count">0</span>
+          <span class="stat-label">pomos</span>
+        </div>
+      </div>
+      <div class="focus-header-actions">
+        <button class="focus-header-btn" id="focus-sound-btn" title="Toggle Sounds">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M11 5L6 9H2v6h4l5 4V5z"></path>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          </svg>
+        </button>
+        <button class="focus-header-btn" id="focus-settings-btn" title="Settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+        <button class="focus-header-btn" id="focus-minimize-btn" title="Minimize (M)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 14 10 14 10 20"></polyline>
+            <polyline points="20 10 14 10 14 4"></polyline>
+            <line x1="14" y1="10" x2="21" y2="3"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+        </button>
+        <button class="focus-header-btn focus-exit" id="focus-exit-btn" title="Exit (Esc)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Content Area - Clean Centered Layout -->
+    <div class="focus-main">
+      <div class="focus-center">
+        <!-- Timer Ring -->
+        <div class="focus-timer-ring" id="focus-timer-ring">
+          <svg viewBox="0 0 100 100">
+            <defs>
+              <linearGradient id="timerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#f97316" />
+                <stop offset="100%" style="stop-color:#ea580c" />
+              </linearGradient>
+              <linearGradient id="breakGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#22c55e" />
+                <stop offset="100%" style="stop-color:#16a34a" />
+              </linearGradient>
+            </defs>
+            <circle class="focus-timer-bg" cx="50" cy="50" r="45"></circle>
+            <circle class="focus-timer-progress" id="focus-timer-progress" cx="50" cy="50" r="45"></circle>
+          </svg>
+          <div class="focus-timer-inner">
+            <span class="focus-timer-display" id="focus-timer-display">25:00</span>
+            <span class="focus-timer-label" id="focus-timer-label">FOCUS</span>
+          </div>
+        </div>
+
+        <!-- Task Card -->
+        <div class="focus-task-card" id="focus-task-card">
+          <div class="focus-task-priority" id="focus-priority"></div>
+          <h1 class="focus-task-name" id="focus-task-name">Loading...</h1>
+          <p class="focus-task-description" id="focus-task-description"></p>
+          <div class="focus-task-meta" id="focus-task-meta"></div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="focus-task-actions">
+          <button class="focus-action-btn focus-complete-btn" id="focus-complete-btn">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            <span>Done</span>
+          </button>
+          <button class="focus-action-btn focus-timer-btn" id="focus-timer-toggle">
+            <svg class="play-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <svg class="pause-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+            <span class="timer-label">Start</span>
+          </button>
+          <button class="focus-action-btn focus-skip-btn" id="focus-skip-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 4 15 12 5 20 5 4"></polygon>
+              <line x1="19" y1="5" x2="19" y2="19"></line>
+            </svg>
+            <span>Skip</span>
+          </button>
+        </div>
+
+        <!-- Navigation -->
+        <div class="focus-nav">
+          <button class="focus-nav-btn" id="focus-prev-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+          <span class="focus-progress" id="focus-progress">1 / 1</span>
+          <button class="focus-nav-btn" id="focus-next-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Keyboard Hints -->
+        <div class="focus-hints">
+          <span class="focus-hint"><kbd>Space</kbd> Complete</span>
+          <span class="focus-hint"><kbd>T</kbd> Timer</span>
+          <span class="focus-hint"><kbd>S</kbd> Skip</span>
+          <span class="focus-hint"><kbd>←</kbd><kbd>→</kbd> Navigate</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="focus-settings-panel" id="focus-settings-panel">
+      <div class="settings-overlay" id="settings-overlay"></div>
+      <div class="settings-content">
+        <div class="settings-header">
+          <h3>Settings</h3>
+          <button class="settings-close" id="focus-settings-close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="settings-body">
+          <div class="setting-group">
+            <label class="setting-label">Focus Duration</label>
+            <div class="setting-control">
+              <button class="setting-btn" data-action="work-minus">−</button>
+              <span class="setting-value"><span id="focus-work-duration">25</span> min</span>
+              <button class="setting-btn" data-action="work-plus">+</button>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label class="setting-label">Break Duration</label>
+            <div class="setting-control">
+              <button class="setting-btn" data-action="break-minus">−</button>
+              <span class="setting-value"><span id="focus-break-duration">5</span> min</span>
+              <button class="setting-btn" data-action="break-plus">+</button>
+            </div>
+          </div>
+          <div class="setting-group">
+            <label class="setting-toggle">
+              <input type="checkbox" id="focus-auto-start" checked>
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">Auto-start breaks</span>
+            </label>
+          </div>
+          <div class="setting-group">
+            <label class="setting-toggle">
+              <input type="checkbox" id="focus-sounds" checked>
+              <span class="toggle-slider"></span>
+              <span class="toggle-label">Sound effects</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Celebration -->
+    <div class="focus-celebration" id="focus-celebration">
+      <div class="confetti-container" id="confetti-container"></div>
+      <div class="celebration-content">
+        <div class="celebration-checkmark">
+          <svg viewBox="0 0 52 52">
+            <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+            <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+          </svg>
+        </div>
+        <h2 class="celebration-title" id="celebration-title">Nice work!</h2>
+        <p class="celebration-subtitle" id="celebration-message">Keep the momentum going</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Mini Widget -->
+  <div class="focus-mini" id="focus-mini">
+    <div class="mini-glow"></div>
+    <div class="mini-timer-ring">
+      <svg viewBox="0 0 40 40">
+        <circle class="mini-ring-bg" cx="20" cy="20" r="18"></circle>
+        <circle class="mini-ring-progress" id="focus-mini-progress" cx="20" cy="20" r="18"></circle>
+      </svg>
+      <span class="mini-time" id="focus-mini-time">25:00</span>
+    </div>
+    <div class="mini-info">
+      <span class="mini-task" id="focus-mini-task">Current task</span>
+      <div class="mini-actions">
+        <button class="mini-btn mini-complete" id="focus-mini-complete" title="Complete">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </button>
+        <button class="mini-btn mini-play" id="focus-mini-timer-toggle" title="Play/Pause">
+          <svg class="play-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <svg class="pause-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
+          </svg>
+        </button>
+        <button class="mini-btn mini-expand" id="focus-mini-expand" title="Expand">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  <!-- Add/Edit Task Modal -->
+  <div class="modal" id="task-modal">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3 id="task-modal-title">Add Task</h3>
+        <button class="btn-icon modal-close" data-modal="task-modal">&#10005;</button>
+      </div>
+      <form id="task-form" class="modal-body">
+        <input type="hidden" id="task-id">
+        <input type="hidden" id="task-parent-id">
+
+        <div class="form-group">
+          <label for="task-name">Task Name *</label>
+          <input type="text" id="task-name" required placeholder="What needs to be done?">
+        </div>
+
+        <div class="form-group">
+          <label for="task-description">Description</label>
+          <textarea id="task-description" rows="2" placeholder="Brief description..."></textarea>
+        </div>
+
+        <div class="form-group context-group">
+          <div class="context-header">
+            <label for="task-context">Brain Dump / Context for AI</label>
+            <button type="button" class="context-guide-toggle" id="context-guide-toggle">
+              <span>Show prompts</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+          </div>
+          <div class="context-guide" id="context-guide">
+            <div class="guide-intro">Answer any that help Claude understand:</div>
+            <div class="guide-prompts-grid">
+              <div class="guide-prompt-item">What does "done" look like? What's the specific deliverable?</div>
+              <div class="guide-prompt-item">Who's the audience? What role should Claude take?</div>
+              <div class="guide-prompt-item">What constraints matter? (time, budget, tools, style)</div>
+              <div class="guide-prompt-item">What's already been tried or decided?</div>
+              <div class="guide-prompt-item">What's blocking you? What do you need to figure out?</div>
+              <div class="guide-prompt-item">What would make this a win vs. just okay?</div>
+            </div>
+          </div>
+          <textarea id="task-context" rows="4" placeholder="Dump your thoughts, context, requirements... Claude can parse this to help you."></textarea>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="task-project">Project</label>
+            <select id="task-project">
+              <option value="">No Project (Inbox)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="task-status">Status</label>
+            <select id="task-status">
+              <option value="todo">Inbox (Unprocessed)</option>
+              <option value="ready">Ready to Work</option>
+              <option value="in-progress">In Progress</option>
+              <option value="waiting">Waiting/Blocked</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="task-priority">Priority</label>
+            <select id="task-priority">
+              <option value="none">None</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="task-due-date">Due Date</label>
+            <input type="date" id="task-due-date">
+          </div>
+        </div>
+
+        <!-- Time Blocking Section -->
+        <div class="form-section">
+          <div class="form-section-header">
+            <span class="form-section-title">Time Blocking</span>
+            <span class="form-section-hint">Schedule when to work on this task</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="task-scheduled-time">Scheduled Time</label>
+              <input type="time" id="task-scheduled-time" step="900">
+            </div>
+            <div class="form-group">
+              <label for="task-scheduled-date">Scheduled Date</label>
+              <input type="date" id="task-scheduled-date">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Estimated Duration</label>
+            <div class="duration-presets" id="duration-presets">
+              <button type="button" class="duration-btn" data-minutes="15">15m</button>
+              <button type="button" class="duration-btn" data-minutes="30">30m</button>
+              <button type="button" class="duration-btn" data-minutes="45">45m</button>
+              <button type="button" class="duration-btn" data-minutes="60">1h</button>
+              <button type="button" class="duration-btn" data-minutes="90">1.5h</button>
+              <button type="button" class="duration-btn" data-minutes="120">2h</button>
+            </div>
+            <input type="hidden" id="task-estimated-minutes">
+          </div>
+        </div>
+
+        <!-- Timeline Section -->
+        <div class="form-section">
+          <div class="form-section-header">
+            <span class="form-section-title">Timeline</span>
+            <span class="form-section-hint">For Gantt chart view</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="task-start-date">Start Date</label>
+              <input type="date" id="task-start-date">
+            </div>
+            <div class="form-group">
+              <label for="task-end-date">End Date</label>
+              <input type="date" id="task-end-date">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="task-assignee">Assignee</label>
+            <select id="task-assignee">
+              <option value="">Unassigned</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Tags</label>
+          <div class="tags-selector" id="tags-selector"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Attached Files/Folders</label>
+          <div class="file-paths-container" id="file-paths-container"></div>
+          <div class="file-path-input-row">
+            <input type="text" id="file-path-input" placeholder="Paste file or folder path...">
+            <button type="button" class="btn btn-secondary btn-small" id="add-file-path-btn">Add</button>
+            <button type="button" class="btn btn-secondary btn-small" id="browse-file-btn">Browse</button>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close" data-modal="task-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add/Edit Project Modal -->
+  <div class="modal" id="project-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="project-modal-title">Add Project</h3>
+        <button class="btn-icon modal-close" data-modal="project-modal">&#10005;</button>
+      </div>
+      <form id="project-form" class="modal-body">
+        <input type="hidden" id="project-id">
+
+        <div class="form-group">
+          <label for="project-name">Project Name *</label>
+          <input type="text" id="project-name" required placeholder="Project name">
+        </div>
+
+        <div class="form-group">
+          <label for="project-description">Description</label>
+          <textarea id="project-description" rows="2" placeholder="What's this project about?"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="project-goal">Goal / Purpose</label>
+          <textarea id="project-goal" rows="2" placeholder="Why does this matter? What's the end vision?"></textarea>
+          <span class="form-hint">This keeps you focused on the bigger picture</span>
+        </div>
+
+        <div class="form-group">
+          <label for="project-working-dir">Working Directory</label>
+          <div class="form-row" style="gap: 8px;">
+            <input type="text" id="project-working-dir" placeholder="Path where Claude sessions will run" style="flex: 1;">
+            <button type="button" class="btn btn-secondary" id="project-browse-dir">Browse</button>
+          </div>
+          <span class="form-hint">Claude sessions launch here. A CLAUDE.md file will be auto-generated.</span>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="project-category">Category</label>
+            <select id="project-category">
+              <option value="">No Category</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="project-status">Status</label>
+            <select id="project-status">
+              <option value="active">⚡ Active</option>
+              <option value="paused">💤 Paused</option>
+              <option value="blocked">🚫 Blocked</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="project-color">Color</label>
+          <div class="color-picker" id="project-color-picker">
+            <button type="button" class="color-option" data-color="#3498db" style="background:#3498db"></button>
+            <button type="button" class="color-option" data-color="#2ecc71" style="background:#2ecc71"></button>
+            <button type="button" class="color-option" data-color="#e74c3c" style="background:#e74c3c"></button>
+            <button type="button" class="color-option" data-color="#f39c12" style="background:#f39c12"></button>
+            <button type="button" class="color-option" data-color="#9b59b6" style="background:#9b59b6"></button>
+            <button type="button" class="color-option" data-color="#1abc9c" style="background:#1abc9c"></button>
+            <button type="button" class="color-option" data-color="#e91e63" style="background:#e91e63"></button>
+            <button type="button" class="color-option" data-color="#607d8b" style="background:#607d8b"></button>
+          </div>
+          <input type="hidden" id="project-color" value="#3498db">
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-danger" id="delete-project-btn" style="display:none">Delete</button>
+          <div class="spacer"></div>
+          <button type="button" class="btn btn-secondary modal-close" data-modal="project-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Project</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add/Edit Tag Modal -->
+  <div class="modal" id="tag-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="tag-modal-title">Add Tag</h3>
+        <button class="btn-icon modal-close" data-modal="tag-modal">&#10005;</button>
+      </div>
+      <form id="tag-form" class="modal-body">
+        <input type="hidden" id="tag-id">
+
+        <div class="form-group">
+          <label for="tag-name">Tag Name *</label>
+          <input type="text" id="tag-name" required placeholder="Tag name">
+        </div>
+
+        <div class="form-group">
+          <label for="tag-color">Color</label>
+          <div class="color-picker" id="tag-color-picker">
+            <button type="button" class="color-option" data-color="#3498db" style="background:#3498db"></button>
+            <button type="button" class="color-option" data-color="#2ecc71" style="background:#2ecc71"></button>
+            <button type="button" class="color-option" data-color="#e74c3c" style="background:#e74c3c"></button>
+            <button type="button" class="color-option" data-color="#f39c12" style="background:#f39c12"></button>
+            <button type="button" class="color-option" data-color="#9b59b6" style="background:#9b59b6"></button>
+            <button type="button" class="color-option" data-color="#1abc9c" style="background:#1abc9c"></button>
+            <button type="button" class="color-option" data-color="#e91e63" style="background:#e91e63"></button>
+            <button type="button" class="color-option" data-color="#607d8b" style="background:#607d8b"></button>
+          </div>
+          <input type="hidden" id="tag-color" value="#3498db">
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-danger" id="delete-tag-btn" style="display:none">Delete</button>
+          <div class="spacer"></div>
+          <button type="button" class="btn btn-secondary modal-close" data-modal="tag-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Tag</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal" id="settings-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Settings</h3>
+        <button class="btn-icon modal-close" data-modal="settings-modal">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <h4>Display</h4>
+          <div class="settings-row settings-row-aligned">
+            <span class="settings-label">Font Size</span>
+            <div class="font-size-controls">
+              <button class="btn-icon-sm" id="font-size-decrease" title="Decrease font size">A&#8722;</button>
+              <span class="font-size-value" id="font-size-value">100%</span>
+              <button class="btn-icon-sm" id="font-size-increase" title="Increase font size">A+</button>
+              <button class="btn-text-sm" id="font-size-reset" title="Reset to default">Reset</button>
+            </div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h4>Data Management</h4>
+          <div class="settings-row">
+            <button class="btn btn-secondary" id="export-btn">Export Data</button>
+            <button class="btn btn-secondary" id="import-btn">Import Data</button>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h4>Team Members</h4>
+          <p class="settings-text">Names available for task assignment in timeline view.</p>
+          <div id="team-members-list" class="team-members-list"></div>
+          <div class="team-member-add-row">
+            <input type="text" id="team-member-input" placeholder="Add team member..." class="team-member-input">
+            <button class="btn btn-secondary btn-small" id="add-team-member-btn">Add</button>
+          </div>
+        </div>
+        <div class="settings-section">
+          <h4>About</h4>
+          <p class="settings-text">TaskFlow PM v1.0.0</p>
+          <p class="settings-text">A powerful to-do list with project management features.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task Dependencies Modal -->
+  <div class="modal" id="dependency-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Task Dependencies</h3>
+        <button class="btn-icon modal-close" data-modal="dependency-modal">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="dependency-task-id">
+        <div class="dependency-task-info" id="dependency-task-info">
+          <span class="dependency-task-name"></span>
+        </div>
+
+        <div class="dependency-section">
+          <h4>Blocked By <span class="dependency-count" id="blocked-by-count">(0)</span></h4>
+          <p class="dependency-hint">This task cannot start until these are completed:</p>
+          <div class="dependency-list" id="blocked-by-list"></div>
+          <div class="dependency-add">
+            <select id="add-blocker-select">
+              <option value="">Select a task...</option>
+            </select>
+            <button class="btn btn-small btn-primary" id="add-blocker-btn">Add Blocker</button>
+          </div>
+        </div>
+
+        <div class="dependency-section">
+          <h4>Blocks <span class="dependency-count" id="blocks-count">(0)</span></h4>
+          <p class="dependency-hint">These tasks are waiting for this one:</p>
+          <div class="dependency-list" id="blocks-list"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary modal-close" data-modal="dependency-modal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category Modal -->
+  <div class="modal" id="category-modal">
+    <div class="modal-content modal-small">
+      <div class="modal-header">
+        <h3 id="category-modal-title">Add Category</h3>
+        <button class="btn-icon modal-close" data-modal="category-modal">&#10005;</button>
+      </div>
+      <form id="category-form" class="modal-body">
+        <input type="hidden" id="category-id">
+        <div class="form-group">
+          <label for="category-name">Category Name *</label>
+          <input type="text" id="category-name" required placeholder="Category name">
+        </div>
+        <div class="form-group">
+          <label for="category-color">Color</label>
+          <div class="color-picker" id="category-color-picker">
+            <button type="button" class="color-option" data-color="#6366f1" style="background:#6366f1"></button>
+            <button type="button" class="color-option" data-color="#10b981" style="background:#10b981"></button>
+            <button type="button" class="color-option" data-color="#f59e0b" style="background:#f59e0b"></button>
+            <button type="button" class="color-option" data-color="#ef4444" style="background:#ef4444"></button>
+            <button type="button" class="color-option" data-color="#8b5cf6" style="background:#8b5cf6"></button>
+            <button type="button" class="color-option" data-color="#06b6d4" style="background:#06b6d4"></button>
+            <button type="button" class="color-option" data-color="#ec4899" style="background:#ec4899"></button>
+            <button type="button" class="color-option" data-color="#64748b" style="background:#64748b"></button>
+          </div>
+          <input type="hidden" id="category-color" value="#6366f1">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-danger" id="delete-category-btn" style="display:none">Delete</button>
+          <div class="spacer"></div>
+          <button type="button" class="btn btn-secondary modal-close" data-modal="category-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Category</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal" id="confirm-modal">
+    <div class="modal-content modal-small">
+      <div class="modal-header">
+        <h3 id="confirm-title">Confirm</h3>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-message">Are you sure?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+        <button class="btn btn-danger" id="confirm-ok">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MCP Tools Modal -->
+  <div class="modal" id="mcp-tools-modal">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3>🔧 MCP Tools Reference</h3>
+        <button class="btn-icon modal-close" data-modal="mcp-tools-modal">&#10005;</button>
+      </div>
+      <div class="modal-body mcp-tools-body">
+        <p class="mcp-intro">These tools are available for Claude to use via MCP. Ask Claude to use any of these!</p>
+
+        <div class="mcp-section">
+          <h4>🤖 Claude Assignment</h4>
+          <div class="mcp-tools-grid">
+            <div class="mcp-tool"><code>assign_task</code> - Assign task to Claude/Vin</div>
+            <div class="mcp-tool"><code>get_claude_tasks</code> - Get Claude-assigned tasks with full context</div>
+            <div class="mcp-tool"><code>sync_claude_queue</code> - Write Claude tasks to queue file</div>
+          </div>
+        </div>
+
+        <div class="mcp-section">
+          <h4>📋 Core CRUD</h4>
+          <div class="mcp-tools-grid">
+            <div class="mcp-tool"><code>get_all_tasks</code> - Get all tasks</div>
+            <div class="mcp-tool"><code>create_task</code> - Create a new task</div>
+            <div class="mcp-tool"><code>update_task</code> - Update task properties</div>
+            <div class="mcp-tool"><code>delete_task</code> - Delete a task</div>
+            <div class="mcp-tool"><code>complete_task</code> - Mark task complete</div>
+            <div class="mcp-tool"><code>create_subtasks</code> - Add subtasks</div>
+          </div>
+        </div>
+
+        <div class="mcp-section">
+          <h4>📅 Views & Filters</h4>
+          <div class="mcp-tools-grid">
+            <div class="mcp-tool"><code>get_today_tasks</code> - Tasks for today</div>
+            <div class="mcp-tool"><code>get_overdue_tasks</code> - Past due tasks</div>
+            <div class="mcp-tool"><code>get_upcoming_tasks</code> - Future tasks</div>
+            <div class="mcp-tool"><code>get_inbox_tasks</code> - Inbox items</div>
+            <div class="mcp-tool"><code>get_ready_tasks</code> - Ready to work on</div>
+            <div class="mcp-tool"><code>get_focus_task</code> - Most important task</div>
+          </div>
+        </div>
+
+        <div class="mcp-section">
+          <h4>⏰ Scheduling</h4>
+          <div class="mcp-tools-grid">
+            <div class="mcp-tool"><code>set_scheduled_time</code> - Schedule a task</div>
+            <div class="mcp-tool"><code>clear_scheduled_time</code> - Unschedule</div>
+            <div class="mcp-tool"><code>bulk_schedule_today</code> - Schedule multiple</div>
+            <div class="mcp-tool"><code>get_calendar_view</code> - Calendar view</div>
+          </div>
+        </div>
+
+        <div class="mcp-section">
+          <h4>🧠 AI Processing</h4>
+          <div class="mcp-tools-grid">
+            <div class="mcp-tool"><code>process_brain_dump</code> - Parse thoughts into tasks</div>
+            <div class="mcp-tool"><code>suggest_subtasks</code> - AI suggests subtasks</div>
+            <div class="mcp-tool"><code>suggest_priority</code> - AI suggests priority</div>
+            <div class="mcp-tool"><code>suggest_next_task</code> - What to do next</div>
+            <div class="mcp-tool"><code>suggest_day_schedule</code> - AI plans your day</div>
+            <div class="mcp-tool"><code>plan_my_day</code> - Daily planning</div>
+          </div>
+        </div>
+
+        <div class="mcp-section">
+          <h4>📊 Recaps & Reviews</h4>
+          <div class="mcp-tools-grid">
+            <div class="mcp-tool"><code>daily_recap</code> - End of day summary</div>
+            <div class="mcp-tool"><code>weekly_review</code> - Weekly review</div>
+            <div class="mcp-tool"><code>add_recap_entry</code> - Log accomplishment</div>
+            <div class="mcp-tool"><code>get_productivity_stats</code> - Productivity metrics</div>
+          </div>
+        </div>
+
+        <div class="mcp-section">
+          <h4>📁 Projects & Dependencies</h4>
+          <div class="mcp-tools-grid">
+            <div class="mcp-tool"><code>get_projects</code> - List projects</div>
+            <div class="mcp-tool"><code>create_project</code> - New project</div>
+            <div class="mcp-tool"><code>add_task_dependency</code> - A blocks B</div>
+            <div class="mcp-tool"><code>get_dependency_graph</code> - Visualize deps</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily Review Modal -->
+  <div class="modal" id="daily-review-modal">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3>Daily Review</h3>
+        <button class="btn-icon modal-close" data-modal="daily-review-modal">&#10005;</button>
+      </div>
+      <div class="modal-body daily-review-body">
+        <div class="review-section">
+          <h4 class="review-section-title">What You Accomplished Today</h4>
+          <div class="review-accomplishments" id="review-accomplishments">
+            <div class="review-empty">No tasks completed today yet</div>
+          </div>
+        </div>
+
+        <div class="review-section">
+          <h4 class="review-section-title">Time Invested</h4>
+          <div class="review-time-stats" id="review-time-stats">
+            <div class="time-stat">
+              <span class="time-stat-value" id="review-total-time">0h 0m</span>
+              <span class="time-stat-label">Total Focus Time</span>
+            </div>
+            <div class="time-stat">
+              <span class="time-stat-value" id="review-pomodoros">0</span>
+              <span class="time-stat-label">Pomodoros</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="review-section">
+          <h4 class="review-section-title">What Did You Learn?</h4>
+          <textarea id="review-learnings" class="review-textarea" placeholder="Capture any insights, discoveries, or lessons learned today..."></textarea>
+        </div>
+
+        <div class="review-section">
+          <h4 class="review-section-title">Plan Tomorrow's Top 3</h4>
+          <div class="review-tomorrow" id="review-tomorrow">
+            <div class="tomorrow-task-input">
+              <span class="tomorrow-number">1</span>
+              <input type="text" id="tomorrow-1" placeholder="Most important task for tomorrow">
+            </div>
+            <div class="tomorrow-task-input">
+              <span class="tomorrow-number">2</span>
+              <input type="text" id="tomorrow-2" placeholder="Second priority">
+            </div>
+            <div class="tomorrow-task-input">
+              <span class="tomorrow-number">3</span>
+              <input type="text" id="tomorrow-3" placeholder="Third priority">
+            </div>
+          </div>
+        </div>
+
+        <div class="review-section">
+          <h4 class="review-section-title">Rate Your Day</h4>
+          <div class="review-rating" id="review-rating">
+            <button class="rating-btn" data-rating="1">1</button>
+            <button class="rating-btn" data-rating="2">2</button>
+            <button class="rating-btn" data-rating="3">3</button>
+            <button class="rating-btn" data-rating="4">4</button>
+            <button class="rating-btn" data-rating="5">5</button>
+          </div>
+          <p class="rating-labels">
+            <span>Rough day</span>
+            <span>Crushed it!</span>
+          </p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary modal-close" data-modal="daily-review-modal">Skip</button>
+        <button class="btn btn-primary" id="save-review-btn">Complete Review</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Command Palette -->
+  <div class="command-palette-overlay" id="command-palette" style="display:none;">
+    <div class="command-palette">
+      <div class="command-palette-input-row">
+        <span class="command-palette-icon">&#128269;</span>
+        <input type="text" id="command-palette-input" class="command-palette-input" placeholder="Search tasks..." autocomplete="off" spellcheck="false">
+        <div class="command-palette-hints">
+          <kbd>Enter</kbd> Open
+          <kbd>A</kbd> Active
+          <kbd>Q</kbd> Claude
+          <kbd>S</kbd> Today
+        </div>
+      </div>
+      <div class="command-palette-results" id="command-palette-results"></div>
+    </div>
+  </div>
+
+  <!-- Blocker Reason Popup -->
+  <div class="blocker-popup-overlay" id="blocker-popup" style="display:none;">
+    <div class="blocker-popup">
+      <div class="blocker-popup-title">What's blocking this?</div>
+      <div class="blocker-popup-options">
+        <button class="blocker-option" data-reason="person">
+          <span class="blocker-emoji">&#128100;</span>
+          <span class="blocker-label">Waiting on someone</span>
+        </button>
+        <button class="blocker-option" data-reason="decision">
+          <span class="blocker-emoji">&#129300;</span>
+          <span class="blocker-label">Need a decision</span>
+        </button>
+        <button class="blocker-option" data-reason="information">
+          <span class="blocker-emoji">&#128269;</span>
+          <span class="blocker-label">Need more info</span>
+        </button>
+        <button class="blocker-option" data-reason="motivation">
+          <span class="blocker-emoji">&#128547;</span>
+          <span class="blocker-label">Motivation / energy</span>
+        </button>
+        <button class="blocker-option" data-reason="other">
+          <span class="blocker-emoji">&#8943;</span>
+          <span class="blocker-label">Other</span>
+        </button>
+      </div>
+      <button class="blocker-skip" id="blocker-skip">Skip</button>
+    </div>
+  </div>
+
+  <!-- Snooze/Reschedule Popup -->
+  <div class="snooze-popup-overlay" id="snooze-popup" style="display:none;">
+    <div class="snooze-popup">
+      <div class="snooze-popup-title">Reschedule</div>
+      <div class="snooze-popup-grid">
+        <button class="snooze-option" data-action="tomorrow">
+          <kbd class="snooze-key">T</kbd>
+          <span class="snooze-label">Tomorrow</span>
+        </button>
+        <button class="snooze-option" data-action="next-week">
+          <kbd class="snooze-key">N</kbd>
+          <span class="snooze-label">Next Week</span>
+        </button>
+        <button class="snooze-option" data-action="pick-date">
+          <kbd class="snooze-key">D</kbd>
+          <span class="snooze-label">Pick Date</span>
+        </button>
+        <button class="snooze-option" data-action="remove">
+          <kbd class="snooze-key">R</kbd>
+          <span class="snooze-label">Remove</span>
+        </button>
+      </div>
+      <input type="date" class="snooze-date-picker" id="snooze-date-picker" style="display:none;">
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

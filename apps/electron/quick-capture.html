@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Capture</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .capture-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(145deg, #fffbf5, #fff8ed);
+      border: 3px solid #f97316;
+      border-radius: 16px;
+      box-shadow: 0 0 30px rgba(249, 115, 22, 0.5),
+                  0 0 60px rgba(249, 115, 22, 0.3),
+                  0 25px 50px -12px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+      animation: glowPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes glowPulse {
+      0%, 100% { box-shadow: 0 0 30px rgba(249, 115, 22, 0.5), 0 0 60px rgba(249, 115, 22, 0.3), 0 25px 50px -12px rgba(0, 0, 0, 0.3); }
+      50% { box-shadow: 0 0 40px rgba(249, 115, 22, 0.7), 0 0 80px rgba(249, 115, 22, 0.4), 0 25px 50px -12px rgba(0, 0, 0, 0.3); }
+    }
+
+    .capture-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      background: linear-gradient(135deg, #f97316, #ea580c);
+      border-bottom: none;
+      -webkit-app-region: drag;
+    }
+
+    .capture-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .capture-icon {
+      width: 22px;
+      height: 22px;
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+      color: #fff;
+    }
+
+    .capture-close {
+      -webkit-app-region: no-drag;
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .capture-close:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .capture-body {
+      flex: 1;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .capture-input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .capture-input {
+      width: 100%;
+      background: #fff;
+      border: 2px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 15px;
+      color: #1f2937;
+      transition: all 0.2s;
+      resize: none;
+      font-family: inherit;
+    }
+
+    .capture-input:focus {
+      outline: none;
+      border-color: #f97316;
+      background: #fff;
+      box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.15);
+    }
+
+    .capture-input::placeholder {
+      color: #9ca3af;
+    }
+
+    #capture-context {
+      min-height: 80px;
+      max-height: 150px;
+    }
+
+    .capture-guide {
+      background: #fff7ed;
+      border: 2px solid #fed7aa;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .guide-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: none;
+      border: none;
+      width: 100%;
+      cursor: pointer;
+      color: #ea580c;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .guide-toggle:hover {
+      background: #ffedd5;
+    }
+
+    .guide-toggle svg {
+      transition: transform 0.2s;
+      stroke: #ea580c;
+    }
+
+    .guide-toggle.expanded svg {
+      transform: rotate(180deg);
+    }
+
+    .guide-content {
+      display: none;
+      padding: 0 14px 14px;
+    }
+
+    .guide-content.show {
+      display: block;
+    }
+
+    .guide-prompts {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .guide-prompt {
+      font-size: 12px;
+      color: #78350f;
+      padding-left: 10px;
+      border-left: 3px solid #f97316;
+    }
+
+    .capture-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: #fef3e2;
+      border-top: 1px solid #fed7aa;
+    }
+
+    .capture-hint {
+      font-size: 12px;
+      color: #92400e;
+    }
+
+    .capture-hint kbd {
+      background: #fff;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-family: inherit;
+      margin: 0 2px;
+      border: 1px solid #e5e7eb;
+      font-weight: 500;
+    }
+
+    .capture-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .capture-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+
+    .capture-btn-secondary {
+      background: #fff;
+      color: #6b7280;
+      border: 1px solid #d1d5db;
+    }
+
+    .capture-btn-secondary:hover {
+      background: #f3f4f6;
+    }
+
+    .capture-btn-primary {
+      background: linear-gradient(135deg, #f97316, #ea580c);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(249, 115, 22, 0.4);
+    }
+
+    .capture-btn-primary:hover {
+      filter: brightness(1.1);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(249, 115, 22, 0.5);
+    }
+
+    .capture-btn-primary:active {
+      transform: translateY(0);
+    }
+
+    /* Success animation */
+    .capture-success {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: #fffbf5;
+      border-radius: 16px;
+    }
+
+    .capture-success.show {
+      display: flex;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    .success-content {
+      text-align: center;
+    }
+
+    .success-icon {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 14px;
+      animation: popIn 0.3s ease-out;
+      box-shadow: 0 8px 25px rgba(34, 197, 94, 0.4);
+    }
+
+    .success-icon svg {
+      color: #fff;
+    }
+
+    .success-text {
+      color: #1f2937;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0); }
+      70% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <div class="capture-container">
+    <div class="capture-header">
+      <div class="capture-title">
+        <div class="capture-icon">+</div>
+        <span>Quick Capture</span>
+      </div>
+      <button class="capture-close" id="close-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <div class="capture-body">
+      <div class="capture-input-group">
+        <input
+          type="text"
+          class="capture-input"
+          id="capture-name"
+          placeholder="What's on your mind?"
+          autofocus
+        >
+      </div>
+
+      <div class="capture-input-group">
+        <textarea
+          class="capture-input"
+          id="capture-context"
+          placeholder="Brain dump any context... (optional)"
+        ></textarea>
+      </div>
+
+      <div class="capture-guide">
+        <button class="guide-toggle" id="guide-toggle">
+          <span>Context prompts to help Claude</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <div class="guide-content" id="guide-content">
+          <div class="guide-prompts">
+            <div class="guide-prompt">What does "done" look like? Specific deliverable?</div>
+            <div class="guide-prompt">Who's the audience? What role should Claude take?</div>
+            <div class="guide-prompt">What constraints matter? (time, budget, tools)</div>
+            <div class="guide-prompt">What's already been tried or decided?</div>
+            <div class="guide-prompt">What's blocking you? What needs figuring out?</div>
+            <div class="guide-prompt">What makes this a win vs. just okay?</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="capture-footer">
+      <span class="capture-hint"><kbd>Enter</kbd> to save <kbd>Esc</kbd> to close</span>
+      <div class="capture-actions">
+        <button class="capture-btn capture-btn-secondary" id="cancel-btn">Cancel</button>
+        <button class="capture-btn capture-btn-primary" id="save-btn">Capture</button>
+      </div>
+    </div>
+
+    <!-- Success State -->
+    <div class="capture-success" id="capture-success">
+      <div class="success-content">
+        <div class="success-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        </div>
+        <div class="success-text">Captured!</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const nameInput = document.getElementById('capture-name');
+    const contextInput = document.getElementById('capture-context');
+    const guideToggle = document.getElementById('guide-toggle');
+    const guideContent = document.getElementById('guide-content');
+    const saveBtn = document.getElementById('save-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const closeBtn = document.getElementById('close-btn');
+    const successEl = document.getElementById('capture-success');
+
+    // Toggle guide
+    guideToggle.addEventListener('click', () => {
+      guideToggle.classList.toggle('expanded');
+      guideContent.classList.toggle('show');
+    });
+
+    // Save task
+    function saveCapture() {
+      const name = nameInput.value.trim();
+      if (!name) {
+        nameInput.focus();
+        return;
+      }
+
+      const context = contextInput.value.trim();
+
+      window.captureApi.save({
+        name,
+        context
+      });
+
+      // Show success
+      successEl.classList.add('show');
+
+      // Close after animation
+      setTimeout(() => {
+        window.captureApi.close();
+      }, 600);
+    }
+
+    // Event listeners
+    saveBtn.addEventListener('click', saveCapture);
+
+    cancelBtn.addEventListener('click', () => {
+      window.captureApi.close();
+    });
+
+    closeBtn.addEventListener('click', () => {
+      window.captureApi.close();
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        window.captureApi.close();
+      } else if (e.key === 'Enter' && !e.shiftKey && document.activeElement !== contextInput) {
+        e.preventDefault();
+        saveCapture();
+      }
+    });
+
+    // Focus name input on load
+    nameInput.focus();
+  </script>
+</body>
+</html>

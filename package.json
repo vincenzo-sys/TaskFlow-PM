@@ -1,27 +1,26 @@
 {
-  "name": "taskflow-pm",
+  "name": "taskflow",
   "version": "1.0.0",
-  "description": "A powerful to-do list with project management features",
-  "main": "main.js",
+  "private": true,
+  "description": "TaskFlow PM - AI-powered task management",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "start": "electron .",
-    "build": "electron-builder"
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:electron": "npm run start --workspace=apps/electron",
+    "dev:mcp": "npm run dev --workspace=apps/mcp-server",
+    "build:web": "npm run build --workspace=apps/web",
+    "build:shared": "npm run build --workspace=packages/shared"
   },
-  "keywords": ["todo", "project-management", "tasks"],
-  "author": "",
-  "license": "MIT",
   "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
+    "turbo": "^2.3.0",
+    "typescript": "^5.3.0"
   },
-  "build": {
-    "appId": "com.taskflow.pm",
-    "productName": "TaskFlow PM",
-    "directories": {
-      "output": "dist"
-    },
-    "win": {
-      "target": "nsis"
-    }
-  }
+  "packageManager": "npm@10.2.0"
 }

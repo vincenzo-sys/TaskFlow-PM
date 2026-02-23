@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-paper: #faf9f7;
+  --accent: #d97448;
+}
+
+body {
+  background: var(--bg-paper);
+  color: #2d2a25;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}

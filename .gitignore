@@ -3,4 +3,33 @@ dist/
 out/
 *.log
 .env
+.env.local
+.env.*.local
 taskflow-data.json
+
+# Turborepo
+.turbo
+
+# Next.js
+apps/web/.next/
+apps/web/out/
+
+# Build outputs
+packages/shared/dist/
+apps/mcp-server/dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+*.tsbuildinfo
+next-env.d.ts
+
+# Misc
+_ul
+nul
