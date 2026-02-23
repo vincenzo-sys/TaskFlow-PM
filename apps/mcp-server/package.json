@@ -14,7 +14,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@supabase/supabase-js": "^2.39.0",
-    "@taskflow/shared": "*"
+    "@taskflow/shared": "*",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "tsx": "^4.7.0",
