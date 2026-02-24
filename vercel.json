@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npx turbo run build --filter=@taskflow/web...",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "outputDirectory": "apps/web/.next"
+}
