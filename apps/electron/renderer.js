@@ -325,7 +325,15 @@ class TaskFlowApp {
   }
 
   generateId() {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    // Use UUID for Supabase compatibility
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // Fallback for older environments
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
   }
 
   // Get today's date in local timezone as YYYY-MM-DD
@@ -11484,7 +11492,7 @@ class TaskFlowApp {
 
     const now = new Date().toISOString();
     const nb = {
-      id: `nb-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      id: this.generateId(),
       title: 'Untitled Notebook',
       content: '',
       icon: '',
@@ -11670,7 +11678,7 @@ class TaskFlowApp {
         Object.assign(existing, data);
       } else {
         project.launchers.push({
-          id: `lnch-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          id: this.generateId(),
           ...data,
           createdAt: now
         });

@@ -1,12 +1,29 @@
 const { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 let mainWindow;
+let loginWindow = null;
 let pillWindow = null;
 let captureWindow = null;
 let floatingBarWindow = null;
+let isOfflineMode = false;
 const dataPath = path.join(app.getPath('userData'), 'taskflow-data.json');
+
+// Lazy-loaded modules (require Supabase which uses dynamic import)
+let supabaseClient = null;
+let dataService = null;
+
+async function getSupabaseClient() {
+  if (!supabaseClient) supabaseClient = require('./supabase-client');
+  return supabaseClient;
+}
+
+async function getDataService() {
+  if (!dataService) dataService = require('./data-service');
+  return dataService;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -29,6 +46,90 @@ function createWindow() {
   });
 
   mainWindow.loadFile('index.html');
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+function createLoginWindow() {
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.focus();
+    return;
+  }
+
+  loginWindow = new BrowserWindow({
+    width: 480,
+    height: 620,
+    resizable: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload-login.js')
+    },
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#faf9f7',
+      symbolColor: '#57534e',
+      height: 40
+    },
+    icon: path.join(__dirname, 'icon.png')
+  });
+
+  loginWindow.loadFile('login.html');
+
+  loginWindow.on('closed', () => {
+    loginWindow = null;
+  });
+}
+
+/**
+ * App startup: check for existing Supabase session.
+ * If valid → open main window. If not → show login.
+ */
+async function startApp() {
+  try {
+    const sbClient = await getSupabaseClient();
+    const session = await sbClient.getSession();
+
+    if (session) {
+      console.log('Existing session found, opening main window');
+      const ds = await getDataService();
+      await ds.init();
+      createWindow();
+      registerGlobalShortcut();
+    } else {
+      console.log('No session, showing login');
+      createLoginWindow();
+    }
+  } catch (err) {
+    console.error('Startup auth check failed, showing login:', err.message);
+    createLoginWindow();
+  }
+}
+
+/**
+ * After successful login/signup: close login, init data service, open main.
+ */
+async function onAuthSuccess() {
+  try {
+    console.log('[Auth] Initializing DataService...');
+    const ds = await getDataService();
+    await ds.init();
+    console.log('[Auth] DataService initialized');
+  } catch (err) {
+    console.error('[Auth] DataService init failed:', err.message, err.stack);
+  }
+
+  console.log('[Auth] Closing login window, opening main...');
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.close();
+    loginWindow = null;
+  }
+
+  createWindow();
+  registerGlobalShortcut();
+  console.log('[Auth] Main window created');
 }
 
 function loadData() {
@@ -207,12 +308,11 @@ function getDefaultData() {
 }
 
 app.whenReady().then(() => {
-  createWindow();
-  registerGlobalShortcut();
+  startApp();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      startApp();
     }
   });
 });
@@ -228,13 +328,239 @@ app.on('window-all-closed', () => {
   }
 });
 
-// IPC Handlers
-ipcMain.handle('load-data', () => {
+// ── Auth IPC Handlers ────────────────────────────────────────
+
+ipcMain.handle('supabase-login', async (event, email, password) => {
+  try {
+    console.log('[Auth] Attempting sign in for:', email);
+    const sbClient = await getSupabaseClient();
+    await sbClient.signIn(email, password);
+    console.log('[Auth] Sign in successful, calling onAuthSuccess...');
+    await onAuthSuccess();
+    console.log('[Auth] onAuthSuccess complete');
+    return { success: true };
+  } catch (err) {
+    console.error('[Auth] Login error:', err.message);
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('supabase-signup', async (event, email, password, displayName) => {
+  try {
+    const sbClient = await getSupabaseClient();
+    await sbClient.signUp(email, password, displayName);
+    // Check if we now have a valid session (email confirmation disabled)
+    const session = await sbClient.getSession();
+    if (session) {
+      await onAuthSuccess();
+      return { success: true };
+    }
+    return { error: 'Account created but email confirmation may be required. Try signing in.' };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('supabase-logout', async () => {
+  try {
+    const sbClient = await getSupabaseClient();
+    await sbClient.signOut();
+    isOfflineMode = false;
+    // Create login window BEFORE closing main (avoids window-all-closed race)
+    createLoginWindow();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.close();
+      mainWindow = null;
+    }
+    return { success: true };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('supabase-get-session', async () => {
+  try {
+    if (isOfflineMode) return { offline: true };
+    const sbClient = await getSupabaseClient();
+    const session = await sbClient.getSession();
+    return { session };
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
+ipcMain.handle('continue-offline', () => {
+  isOfflineMode = true;
+  if (loginWindow && !loginWindow.isDestroyed()) {
+    loginWindow.close();
+    loginWindow = null;
+  }
+  createWindow();
+  registerGlobalShortcut();
+  return { success: true };
+});
+
+// ── Data IPC Handlers ────────────────────────────────────────
+
+ipcMain.handle('load-data', async () => {
+  // If authenticated, load from Supabase
+  if (!isOfflineMode) {
+    try {
+      const ds = await getDataService();
+      if (ds.isAuthenticated()) {
+        const data = await ds.loadAllData();
+        return migrateData(data);
+      }
+    } catch (err) {
+      console.error('Supabase load failed, falling back to local:', err.message);
+    }
+  }
+  // Fallback to local JSON
   return loadData();
 });
 
-ipcMain.handle('save-data', (event, data) => {
-  return saveData(data);
+ipcMain.handle('save-data', async (event, data) => {
+  // Always save locally
+  const result = saveData(data);
+
+  // Also sync to Supabase if authenticated
+  if (!isOfflineMode) {
+    try {
+      const ds = await getDataService();
+      if (ds.isAuthenticated()) {
+        // Fire-and-forget: don't block save on sync
+        ds.syncChanges(data).catch(err => {
+          console.error('Supabase sync failed (local save succeeded):', err.message);
+        });
+      }
+    } catch (err) {
+      // DataService not initialized — ignore
+    }
+  }
+
+  return result;
+});
+
+// ── DataService Granular IPC Channels (ds:*) ─────────────────
+
+ipcMain.handle('ds:create-task', async (event, taskData) => {
+  const ds = await getDataService();
+  return ds.createTask(taskData);
+});
+
+ipcMain.handle('ds:update-task', async (event, taskId, updates) => {
+  const ds = await getDataService();
+  return ds.updateTask(taskId, updates);
+});
+
+ipcMain.handle('ds:delete-task', async (event, taskId) => {
+  const ds = await getDataService();
+  return ds.deleteTask(taskId);
+});
+
+ipcMain.handle('ds:complete-task', async (event, taskId) => {
+  const ds = await getDataService();
+  return ds.completeTask(taskId);
+});
+
+ipcMain.handle('ds:create-project', async (event, projectData) => {
+  const ds = await getDataService();
+  return ds.createProject(projectData);
+});
+
+ipcMain.handle('ds:update-project', async (event, projectId, updates) => {
+  const ds = await getDataService();
+  return ds.updateProject(projectId, updates);
+});
+
+ipcMain.handle('ds:delete-project', async (event, projectId) => {
+  const ds = await getDataService();
+  return ds.deleteProject(projectId);
+});
+
+ipcMain.handle('ds:create-subtask', async (event, parentTaskId, subtaskData) => {
+  const ds = await getDataService();
+  return ds.createSubtask(parentTaskId, subtaskData);
+});
+
+ipcMain.handle('ds:update-subtask', async (event, subtaskId, updates) => {
+  const ds = await getDataService();
+  return ds.updateSubtask(subtaskId, updates);
+});
+
+ipcMain.handle('ds:delete-subtask', async (event, subtaskId) => {
+  const ds = await getDataService();
+  return ds.deleteSubtask(subtaskId);
+});
+
+ipcMain.handle('ds:create-tag', async (event, tagData) => {
+  const ds = await getDataService();
+  return ds.createTag(tagData);
+});
+
+ipcMain.handle('ds:update-tag', async (event, tagId, updates) => {
+  const ds = await getDataService();
+  return ds.updateTag(tagId, updates);
+});
+
+ipcMain.handle('ds:delete-tag', async (event, tagId) => {
+  const ds = await getDataService();
+  return ds.deleteTag(tagId);
+});
+
+ipcMain.handle('ds:create-category', async (event, catData) => {
+  const ds = await getDataService();
+  return ds.createCategory(catData);
+});
+
+ipcMain.handle('ds:update-category', async (event, catId, updates) => {
+  const ds = await getDataService();
+  return ds.updateCategory(catId, updates);
+});
+
+ipcMain.handle('ds:delete-category', async (event, catId) => {
+  const ds = await getDataService();
+  return ds.deleteCategory(catId);
+});
+
+ipcMain.handle('ds:create-notebook', async (event, notebookData) => {
+  const ds = await getDataService();
+  return ds.createNotebook(notebookData);
+});
+
+ipcMain.handle('ds:update-notebook', async (event, notebookId, updates) => {
+  const ds = await getDataService();
+  return ds.updateNotebook(notebookId, updates);
+});
+
+ipcMain.handle('ds:delete-notebook', async (event, notebookId) => {
+  const ds = await getDataService();
+  return ds.deleteNotebook(notebookId);
+});
+
+ipcMain.handle('ds:add-recap-entry', async (event, entryData) => {
+  const ds = await getDataService();
+  return ds.addRecapEntry(entryData);
+});
+
+ipcMain.handle('ds:save-recap', async (event, recapData) => {
+  const ds = await getDataService();
+  return ds.saveRecap(recapData);
+});
+
+ipcMain.handle('ds:update-working-on', async (event, taskIds) => {
+  const ds = await getDataService();
+  return ds.updateWorkingOn(taskIds);
+});
+
+ipcMain.handle('ds:update-preferences', async (event, updates) => {
+  const ds = await getDataService();
+  return ds.updatePreferences(updates);
+});
+
+ipcMain.handle('ds:load-data', async () => {
+  const ds = await getDataService();
+  return ds.loadAllData();
 });
 
 ipcMain.handle('export-data', async (event, data) => {
@@ -723,7 +1049,7 @@ ipcMain.on('capture-save', (event, data) => {
 
   // Create the task with context field
   const task = {
-    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: crypto.randomUUID(),
     name: data.name,
     description: '',
     context: data.context || '',  // Brain dump context

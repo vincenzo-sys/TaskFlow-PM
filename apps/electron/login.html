@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src https://xteoofowswtvtxgroxog.supabase.co wss://xteoofowswtvtxgroxog.supabase.co">
+  <title>TaskFlow PM — Sign In</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #faf9f7;
+      color: #1c1917;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-app-region: drag;
+    }
+
+    /* Title bar drag area */
+    .titlebar {
+      height: 40px;
+      flex-shrink: 0;
+    }
+
+    .login-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-app-region: no-drag;
+    }
+
+    .login-card {
+      width: 380px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 40px 32px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .logo h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: #1c1917;
+      letter-spacing: -0.02em;
+    }
+
+    .logo p {
+      font-size: 13px;
+      color: #78716c;
+      margin-top: 6px;
+    }
+
+    /* Tab switcher */
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 24px;
+      border-bottom: 2px solid #e7e5e4;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px 0;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 500;
+      color: #a8a29e;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .tab:hover { color: #57534e; }
+    .tab.active {
+      color: #6366f1;
+      border-bottom-color: #6366f1;
+    }
+
+    /* Form */
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #57534e;
+      margin-bottom: 6px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1.5px solid #d6d3d1;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      background: #faf9f7;
+      color: #1c1917;
+    }
+
+    .form-group input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 11px;
+      font-size: 14px;
+      font-weight: 600;
+      color: white;
+      background: #6366f1;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .submit-btn:hover { background: #4f46e5; }
+    .submit-btn:active { transform: scale(0.98); }
+    .submit-btn:disabled {
+      background: #a5b4fc;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Error message */
+    .error-msg {
+      display: none;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: #dc2626;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+
+    .error-msg.visible { display: block; }
+
+    /* Loading spinner */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 8px 0;
+      font-size: 13px;
+      color: #78716c;
+    }
+
+    .loading.visible { display: block; }
+
+    /* Hidden form */
+    .auth-form { display: none; }
+    .auth-form.active { display: block; }
+
+    /* Signup-only field */
+    .signup-only { display: none; }
+    .auth-form.signup .signup-only { display: block; }
+
+    /* Offline mode link */
+    .offline-link {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .offline-link a {
+      font-size: 13px;
+      color: #78716c;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .offline-link a:hover {
+      color: #6366f1;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="titlebar"></div>
+
+  <div class="login-container">
+    <div class="login-card">
+      <div class="logo">
+        <h1>TaskFlow PM</h1>
+        <p>Sign in to sync your tasks</p>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="login">Sign In</div>
+        <div class="tab" data-tab="signup">Sign Up</div>
+      </div>
+
+      <div class="error-msg" id="error-msg"></div>
+      <div class="loading" id="loading">Signing in...</div>
+
+      <!-- Login Form -->
+      <form class="auth-form active" id="login-form">
+        <div class="form-group">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" placeholder="you@example.com" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" placeholder="Your password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="submit-btn" id="login-btn">Sign In</button>
+      </form>
+
+      <!-- Signup Form -->
+      <form class="auth-form" id="signup-form">
+        <div class="form-group">
+          <label for="signup-name">Display Name</label>
+          <input type="text" id="signup-name" placeholder="Your name" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label for="signup-email">Email</label>
+          <input type="email" id="signup-email" placeholder="you@example.com" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="signup-password">Password</label>
+          <input type="password" id="signup-password" placeholder="At least 6 characters" required minlength="6" autocomplete="new-password">
+        </div>
+        <button type="submit" class="submit-btn" id="signup-btn">Create Account</button>
+      </form>
+
+      <div class="offline-link">
+        <a id="offline-btn">Continue offline (local only)</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab');
+    const loginForm = document.getElementById('login-form');
+    const signupForm = document.getElementById('signup-form');
+    const errorMsg = document.getElementById('error-msg');
+    const loading = document.getElementById('loading');
+
+    // Tab switching
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        loginForm.classList.toggle('active', target === 'login');
+        signupForm.classList.toggle('active', target === 'signup');
+        hideError();
+      });
+    });
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.classList.add('visible');
+    }
+
+    function hideError() {
+      errorMsg.classList.remove('visible');
+    }
+
+    function setLoading(isLoading, text) {
+      loading.textContent = text || 'Signing in...';
+      loading.classList.toggle('visible', isLoading);
+      document.querySelectorAll('.submit-btn').forEach(btn => btn.disabled = isLoading);
+    }
+
+    // Login
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideError();
+      setLoading(true, 'Signing in...');
+
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+
+      try {
+        const result = await window.authApi.login(email, password);
+        if (result.error) {
+          showError(result.error);
+          setLoading(false);
+        }
+        // On success, main process will close this window and open main
+      } catch (err) {
+        showError(err.message || 'Sign in failed');
+        setLoading(false);
+      }
+    });
+
+    // Signup
+    signupForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideError();
+      setLoading(true, 'Creating account...');
+
+      const name = document.getElementById('signup-name').value.trim();
+      const email = document.getElementById('signup-email').value.trim();
+      const password = document.getElementById('signup-password').value;
+
+      try {
+        const result = await window.authApi.signup(email, password, name);
+        if (result.error) {
+          showError(result.error);
+          setLoading(false);
+        }
+        // On success, main process will close this window and open main
+      } catch (err) {
+        showError(err.message || 'Sign up failed');
+        setLoading(false);
+      }
+    });
+
+    // Offline mode
+    document.getElementById('offline-btn').addEventListener('click', () => {
+      window.authApi.continueOffline();
+    });
+  </script>
+</body>
+</html>
