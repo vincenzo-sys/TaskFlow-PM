@@ -686,16 +686,15 @@ async function inviteByEmail(email, role = 'member') {
   const client = await supabaseClient.getClient();
   if (!_teamId) await init();
 
-  const { data, error } = await client
+  // Insert without .select() to avoid SELECT RLS policy hitting auth.users
+  const { error } = await client
     .from('team_invitations')
     .insert({
       team_id: _teamId,
       invited_by: _userId,
       email: email.trim().toLowerCase(),
       role,
-    })
-    .select()
-    .single();
+    });
   if (error) throw error;
 
   // Send email notification (non-blocking — don't fail the invite if email fails)
@@ -715,7 +714,7 @@ async function inviteByEmail(email, role = 'member') {
     console.error('Invitation email failed (invite still created):', emailErr.message);
   }
 
-  return data;
+  return { success: true };
 }
 
 async function getTeamInvitations() {

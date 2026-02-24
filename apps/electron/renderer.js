@@ -4112,12 +4112,12 @@ class TaskFlowApp {
 
     // Build modal HTML
     const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
+    overlay.className = 'modal open';
     overlay.innerHTML = `
-      <div class="modal" style="max-width:480px;">
+      <div class="modal-content" style="max-width:480px;">
         <div class="modal-header">
           <h3>Share: ${this.escapeHtml(project.name)}</h3>
-          <button class="modal-close">&times;</button>
+          <button class="modal-close-btn">&times;</button>
         </div>
         <div class="modal-body" style="padding:16px;">
           <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px;">
@@ -4170,7 +4170,7 @@ class TaskFlowApp {
 
     // Close modal
     const close = () => overlay.remove();
-    overlay.querySelector('.modal-close').addEventListener('click', close);
+    overlay.querySelector('.modal-close-btn').addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
     // Add member
