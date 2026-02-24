@@ -53,6 +53,11 @@ contextBridge.exposeInMainWorld('api', {
     removeProjectMember: (projectId, userId) => ipcRenderer.invoke('ds:remove-project-member', projectId, userId),
   },
 
+  // ── Realtime sync ────────────────────────────────────────
+  onRealtimeChange: (callback) => {
+    ipcRenderer.on('realtime-change', (event, data) => callback(data));
+  },
+
   // ── Focus Pill APIs ────────────────────────────────────────
   showPill: () => ipcRenderer.invoke('show-pill'),
   hidePill: () => ipcRenderer.invoke('hide-pill'),

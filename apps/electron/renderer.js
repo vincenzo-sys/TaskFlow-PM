@@ -139,6 +139,21 @@ class TaskFlowApp {
       this.render();
     });
 
+    // Listen for realtime changes from teammates
+    window.api.onRealtimeChange?.(async (change) => {
+      console.log(`Realtime: ${change.eventType} on ${change.table}`);
+      try {
+        const freshData = await window.api.loadData();
+        // Preserve local-only state
+        const workingOnTaskIds = this.data.workingOnTaskIds;
+        this.data = freshData;
+        if (workingOnTaskIds) this.data.workingOnTaskIds = workingOnTaskIds;
+        this.render();
+      } catch (err) {
+        console.error('Realtime refresh failed:', err.message);
+      }
+    });
+
   }
 
   handleFloatingBarComplete(taskId) {

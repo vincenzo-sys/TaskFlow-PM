@@ -123,13 +123,39 @@ async function loadAllData() {
   // Transform to local format
   const localData = transform.supabaseToLocal(supaData);
 
-  // Fetch team members (parallel-safe, non-blocking)
+  // Fetch team members and project members (parallel-safe, non-blocking)
   try {
     const teamMembers = await getTeamMembers();
     localData.teamMembers = teamMembers;
   } catch (err) {
     console.error('Failed to load team members:', err.message);
     localData.teamMembers = [];
+  }
+
+  // Attach project members to each project
+  if (projectIds.length > 0) {
+    try {
+      const { data: allProjMembers } = await client
+        .from('project_members')
+        .select('project_id, user_id, role, added_at, profiles:user_id(display_name, email)')
+        .in('project_id', projectIds);
+      const pmByProject = new Map();
+      for (const pm of (allProjMembers || [])) {
+        if (!pmByProject.has(pm.project_id)) pmByProject.set(pm.project_id, []);
+        pmByProject.get(pm.project_id).push({
+          userId: pm.user_id,
+          role: pm.role,
+          addedAt: pm.added_at,
+          displayName: pm.profiles?.display_name || pm.profiles?.email || 'Unknown',
+          email: pm.profiles?.email || '',
+        });
+      }
+      for (const project of localData.projects) {
+        project.members = pmByProject.get(project.id) || [];
+      }
+    } catch (err) {
+      console.error('Failed to load project members:', err.message);
+    }
   }
 
   // Include userId for renderer
@@ -545,6 +571,24 @@ async function syncChanges(newData) {
       }
     }
 
+    // Sync recap entries + tags
+    for (const entry of (newData.recapLog || [])) {
+      if (isUUID(entry.id)) {
+        const supaEntry = transform.localRecapEntryToSupabase(entry, _teamId, _userId);
+        supaEntry.id = entry.id;
+        await client.from('recap_entries').upsert(supaEntry, { onConflict: 'id' });
+
+        // Sync recap tags — replace all tags for this entry
+        if (entry.tags) {
+          await client.from('recap_entry_tags').delete().eq('recap_entry_id', entry.id);
+          if (entry.tags.length > 0) {
+            const tagRows = entry.tags.map(tag => ({ recap_entry_id: entry.id, tag }));
+            await client.from('recap_entry_tags').insert(tagRows);
+          }
+        }
+      }
+    }
+
     // Sync preferences
     if (newData.workingOnTaskIds || newData.favorites || newData.settings) {
       const prefUpdates = {};
@@ -581,6 +625,37 @@ async function syncTask(client, task, projectId) {
       supaSt.id = st.id;
       supaSt.parent_task_id = task.id;
       await client.from('tasks').upsert(supaSt, { onConflict: 'id' });
+    }
+  }
+
+  // Sync task tags — replace all tags for this task
+  if (task.tags) {
+    await client.from('task_tags').delete().eq('task_id', task.id);
+    const tagRows = task.tags
+      .map(t => ({ task_id: task.id, tag_id: typeof t === 'string' ? t : t.id }))
+      .filter(r => isUUID(r.tag_id));
+    if (tagRows.length > 0) {
+      await client.from('task_tags').insert(tagRows);
+    }
+  }
+
+  // Sync task files — replace all file paths for this task
+  if (task.filePaths) {
+    await client.from('task_files').delete().eq('task_id', task.id);
+    if (task.filePaths.length > 0) {
+      const fileRows = task.filePaths.map(fp => ({ task_id: task.id, file_path: fp }));
+      await client.from('task_files').insert(fileRows);
+    }
+  }
+
+  // Sync dependencies (blockedBy) — replace for this task
+  if (task.blockedBy) {
+    await client.from('task_dependencies').delete().eq('blocked_task_id', task.id);
+    const depRows = task.blockedBy
+      .filter(id => isUUID(id))
+      .map(blockingId => ({ blocked_task_id: task.id, blocking_task_id: blockingId }));
+    if (depRows.length > 0) {
+      await client.from('task_dependencies').insert(depRows);
     }
   }
 }

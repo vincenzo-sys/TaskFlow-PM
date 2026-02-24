@@ -14,6 +14,7 @@ const dataPath = path.join(app.getPath('userData'), 'taskflow-data.json');
 // Lazy-loaded modules (require Supabase which uses dynamic import)
 let supabaseClient = null;
 let dataService = null;
+let realtimeSync = null;
 
 async function getSupabaseClient() {
   if (!supabaseClient) supabaseClient = require('./supabase-client');
@@ -98,6 +99,7 @@ async function startApp() {
       await ds.init();
       createWindow();
       registerGlobalShortcut();
+      startRealtime(ds);
     } else {
       console.log('No session, showing login');
       createLoginWindow();
@@ -130,6 +132,24 @@ async function onAuthSuccess() {
   createWindow();
   registerGlobalShortcut();
   console.log('[Auth] Main window created');
+
+  try {
+    const ds = await getDataService();
+    startRealtime(ds);
+  } catch (err) {
+    console.error('[Auth] Realtime start failed:', err.message);
+  }
+}
+
+function startRealtime(ds) {
+  if (isOfflineMode || !mainWindow) return;
+  try {
+    if (!realtimeSync) realtimeSync = require('./realtime-sync');
+    realtimeSync.start(ds.getTeamId(), ds.getUserId(), mainWindow);
+    console.log('Realtime sync started');
+  } catch (err) {
+    console.error('Failed to start realtime sync:', err.message);
+  }
 }
 
 function loadData() {
@@ -363,6 +383,11 @@ ipcMain.handle('supabase-signup', async (event, email, password, displayName) =>
 
 ipcMain.handle('supabase-logout', async () => {
   try {
+    // Stop realtime before logout
+    if (realtimeSync) {
+      await realtimeSync.stop();
+      console.log('Realtime sync stopped');
+    }
     const sbClient = await getSupabaseClient();
     await sbClient.signOut();
     isOfflineMode = false;
