@@ -31,7 +31,8 @@ class TaskFlowApp {
       showCompleted: false,
       workingOnTaskIds: [],
       notesExpanded: true,
-      expandedUpNextIds: new Set()
+      expandedUpNextIds: new Set(),
+      myTasksFilter: false, // false = All Tasks, true = My Tasks only
     };
 
     // Undo stack (in-memory, max 30 actions)
@@ -61,6 +62,9 @@ class TaskFlowApp {
       aiMessages: []
     };
 
+    // Current user ID (from Supabase)
+    this.currentUserId = null;
+
     // Timeline view mode: 'single' or 'dual'
     this.timelineMode = 'single';
 
@@ -80,6 +84,12 @@ class TaskFlowApp {
 
   async init() {
     this.data = await window.api.loadData();
+
+    // Store current user ID for filtering
+    this.currentUserId = this.data.currentUserId || null;
+
+    // Ensure teamMembers array exists
+    if (!this.data.teamMembers) this.data.teamMembers = [];
 
     // Migrate old single workingOnTaskId to array
     if (this.data.workingOnTaskId && !this.data.workingOnTaskIds) {
@@ -102,6 +112,9 @@ class TaskFlowApp {
     this.bindEvents();
     this.setupFocusReturnRefresh();
     this.render();
+
+    // Check for pending team invitations
+    this.checkPendingInvitationsForMe();
 
     // Listen for quick capture
     window.api.onTaskCaptured((task) => {
@@ -866,13 +879,14 @@ class TaskFlowApp {
     document.getElementById('settings-btn').addEventListener('click', () => {
       this.updateFontSizeDisplay();
       this.renderTeamMembersList();
+      this.renderPendingInvitations();
       this.openModal('settings-modal');
     });
 
-    // Team members management
-    document.getElementById('add-team-member-btn')?.addEventListener('click', () => this.addTeamMember());
-    document.getElementById('team-member-input')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); this.addTeamMember(); }
+    // Team member invitation
+    document.getElementById('invite-member-btn')?.addEventListener('click', () => this.inviteTeamMember());
+    document.getElementById('invite-email-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this.inviteTeamMember(); }
     });
 
     // Modal close buttons
@@ -3525,8 +3539,10 @@ class TaskFlowApp {
     let assignedBadge = '';
     if (task.assignedTo === 'claude') {
       assignedBadge = '<span class="assigned-badge claude-badge" title="Assigned to Claude">&#129302;</span>';
-    } else if (task.assignedTo === 'vin') {
-      assignedBadge = '<span class="assigned-badge vin-badge" title="Assigned to Vin">V</span>';
+    } else if (task.assignedTo) {
+      const name = this.getAssignedToDisplayName(task.assignedTo);
+      const initial = name ? name.charAt(0).toUpperCase() : '?';
+      assignedBadge = `<span class="assigned-badge member-badge" title="Assigned to ${this.escapeHtml(name || '')}">${initial}</span>`;
     }
 
     el.innerHTML = `
@@ -3640,8 +3656,10 @@ class TaskFlowApp {
     let assignedBadge = '';
     if (subtask.assignedTo === 'claude') {
       assignedBadge = '<span class="assigned-badge claude-badge" title="Assigned to Claude">&#129302;</span>';
-    } else if (subtask.assignedTo === 'vin') {
-      assignedBadge = '<span class="assigned-badge vin-badge" title="Assigned to Vin">V</span>';
+    } else if (subtask.assignedTo) {
+      const name = this.getAssignedToDisplayName(subtask.assignedTo);
+      const initial = name ? name.charAt(0).toUpperCase() : '?';
+      assignedBadge = `<span class="assigned-badge member-badge" title="Assigned to ${this.escapeHtml(name || '')}">${initial}</span>`;
     }
     el.innerHTML = `
       <button type="button" class="subtask-checkbox ${subtask.status === 'done' ? 'checked' : ''}">${subtask.status === 'done' ? '&#10003;' : ''}</button>
@@ -3911,56 +3929,154 @@ class TaskFlowApp {
   }
 
   populateAssigneeDropdown(selectEl) {
-    const members = (this.data.settings && this.data.settings.teamMembers) || [];
+    const members = this.data.teamMembers || [];
     selectEl.innerHTML = '<option value="">Unassigned</option>';
-    members.forEach(name => {
-      selectEl.innerHTML += `<option value="${this.escapeHtml(name)}">${this.escapeHtml(name)}</option>`;
+    members.forEach(m => {
+      selectEl.innerHTML += `<option value="${this.escapeHtml(m.userId)}">${this.escapeHtml(m.displayName)}</option>`;
     });
+    // Always add Claude as a special option
+    selectEl.innerHTML += '<option value="claude">Claude</option>';
+  }
+
+  /**
+   * Build <option> HTML for assignedTo dropdowns from team members.
+   */
+  buildAssignedToOptions(currentValue) {
+    const members = this.data.teamMembers || [];
+    let html = `<option value="" ${!currentValue ? 'selected' : ''}>Unassigned</option>`;
+    members.forEach(m => {
+      html += `<option value="${this.escapeHtml(m.userId)}" ${currentValue === m.userId ? 'selected' : ''}>${this.escapeHtml(m.displayName)}</option>`;
+    });
+    html += `<option value="claude" ${currentValue === 'claude' ? 'selected' : ''}>Claude</option>`;
+    return html;
+  }
+
+  /**
+   * Look up display name for an assignedTo value.
+   */
+  getAssignedToDisplayName(assignedTo) {
+    if (!assignedTo) return null;
+    if (assignedTo === 'claude') return 'Claude';
+    const member = (this.data.teamMembers || []).find(m => m.userId === assignedTo);
+    return member ? member.displayName : assignedTo;
   }
 
   renderTeamMembersList() {
     const container = document.getElementById('team-members-list');
     if (!container) return;
-    const members = (this.data.settings && this.data.settings.teamMembers) || [];
+    const members = this.data.teamMembers || [];
     if (members.length === 0) {
-      container.innerHTML = '<span class="settings-text" style="font-size:12px;color:var(--text-muted)">No team members added yet.</span>';
+      container.innerHTML = '<span class="settings-text" style="font-size:12px;color:var(--text-muted)">No team members yet.</span>';
       return;
     }
-    container.innerHTML = members.map(name => `
+    container.innerHTML = members.map(m => `
       <div class="team-member-chip">
-        <span>${this.escapeHtml(name)}</span>
-        <button class="team-member-remove" data-name="${this.escapeHtml(name)}" title="Remove">&times;</button>
+        <span>${this.escapeHtml(m.displayName)}</span>
+        <span class="team-member-role">${this.escapeHtml(m.role || 'member')}</span>
       </div>
     `).join('');
-    container.querySelectorAll('.team-member-remove').forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.removeTeamMember(btn.dataset.name);
+  }
+
+  async renderPendingInvitations() {
+    const container = document.getElementById('pending-invitations-list');
+    if (!container) return;
+    try {
+      const invitations = await window.api.ds.getInvitations();
+      if (!invitations || invitations.length === 0) {
+        container.innerHTML = '<span class="settings-text" style="font-size:12px;color:var(--text-muted)">No pending invitations.</span>';
+        return;
+      }
+      container.innerHTML = invitations.map(inv => `
+        <div class="invitation-item">
+          <span class="invitation-email">${this.escapeHtml(inv.email)}</span>
+          <span class="invitation-role">${this.escapeHtml(inv.role)}</span>
+          <span class="invitation-status-badge pending">Pending</span>
+          <button class="btn btn-small btn-danger invitation-cancel" data-id="${inv.id}" title="Cancel invitation">&times;</button>
+        </div>
+      `).join('');
+      container.querySelectorAll('.invitation-cancel').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          try {
+            await window.api.ds.declineInvitation(btn.dataset.id);
+            this.showToast('Invitation cancelled');
+            this.renderPendingInvitations();
+          } catch (err) {
+            this.showToast('Failed to cancel: ' + err.message);
+          }
+        });
       });
-    });
-  }
-
-  addTeamMember() {
-    const input = document.getElementById('team-member-input');
-    if (!input) return;
-    const name = input.value.trim();
-    if (!name) return;
-    if (!this.data.settings) this.data.settings = {};
-    if (!this.data.settings.teamMembers) this.data.settings.teamMembers = [];
-    if (this.data.settings.teamMembers.includes(name)) {
-      this.showToast('Team member already exists');
-      return;
+    } catch (err) {
+      container.innerHTML = '<span class="settings-text" style="font-size:12px;color:var(--text-muted)">Could not load invitations.</span>';
     }
-    this.data.settings.teamMembers.push(name);
-    this.saveData();
-    input.value = '';
-    this.renderTeamMembersList();
   }
 
-  removeTeamMember(name) {
-    if (!this.data.settings || !this.data.settings.teamMembers) return;
-    this.data.settings.teamMembers = this.data.settings.teamMembers.filter(m => m !== name);
-    this.saveData();
-    this.renderTeamMembersList();
+  async inviteTeamMember() {
+    const emailInput = document.getElementById('invite-email-input');
+    const roleSelect = document.getElementById('invite-role-select');
+    if (!emailInput) return;
+    const email = emailInput.value.trim();
+    if (!email) return;
+    const role = roleSelect ? roleSelect.value : 'member';
+
+    try {
+      await window.api.ds.inviteMember(email, role);
+      this.showToast(`Invitation sent to ${email}`);
+      emailInput.value = '';
+      this.renderPendingInvitations();
+    } catch (err) {
+      this.showToast('Failed to invite: ' + (err.message || 'Unknown error'));
+    }
+  }
+
+  async checkPendingInvitationsForMe() {
+    try {
+      const invitations = await window.api.ds.getMyInvitations();
+      if (!invitations || invitations.length === 0) return;
+
+      const banner = document.getElementById('invitation-banner');
+      if (!banner) return;
+
+      const inv = invitations[0]; // Show the first pending invitation
+      banner.innerHTML = `
+        <span class="invitation-banner-text">
+          You've been invited to join <strong>${this.escapeHtml(inv.team_name)}</strong> by ${this.escapeHtml(inv.invited_by_name)}.
+        </span>
+        <div class="invitation-banner-actions">
+          <button class="btn btn-small btn-primary" id="accept-invitation-btn">Accept</button>
+          <button class="btn btn-small btn-ghost" id="decline-invitation-btn">Decline</button>
+        </div>
+      `;
+      banner.classList.remove('hidden');
+      banner.dataset.invitationId = inv.id;
+
+      document.getElementById('accept-invitation-btn')?.addEventListener('click', async () => {
+        try {
+          await window.api.ds.acceptInvitation(inv.id);
+          this.showToast('Invitation accepted! Reloading...');
+          banner.classList.add('hidden');
+          // Reload data to get new team context
+          this.data = await window.api.loadData();
+          this.currentUserId = this.data.currentUserId || null;
+          if (!this.data.teamMembers) this.data.teamMembers = [];
+          this.render();
+        } catch (err) {
+          this.showToast('Failed to accept: ' + err.message);
+        }
+      });
+
+      document.getElementById('decline-invitation-btn')?.addEventListener('click', async () => {
+        try {
+          await window.api.ds.declineInvitation(inv.id);
+          banner.classList.add('hidden');
+          this.showToast('Invitation declined');
+        } catch (err) {
+          this.showToast('Failed to decline: ' + err.message);
+        }
+      });
+    } catch (err) {
+      // Silently fail — invitations are not critical
+      console.error('Failed to check invitations:', err.message);
+    }
   }
 
   openProjectModal(projectId = null) {
@@ -4479,9 +4595,7 @@ class TaskFlowApp {
           <div class="subtask-checkbox ${st.status === 'done' ? 'checked' : ''}">${st.status === 'done' ? '&#10003;' : ''}</div>
           <span class="subtask-name">${this.escapeHtml(st.name)}</span>
           <select class="subtask-assigned-to" data-subtask-id="${st.id}">
-            <option value="" ${!st.assignedTo ? 'selected' : ''}>-</option>
-            <option value="vin" ${st.assignedTo === 'vin' ? 'selected' : ''}>Vin</option>
-            <option value="claude" ${st.assignedTo === 'claude' ? 'selected' : ''}>Claude</option>
+            ${this.buildAssignedToOptions(st.assignedTo).replace('Unassigned', '-')}
           </select>
           <button class="task-action-btn delete-subtask" title="Delete">&#10005;</button>
         </div>
@@ -4539,9 +4653,7 @@ class TaskFlowApp {
         <div class="detail-field">
           <span class="detail-field-label">Assigned To</span>
           <select class="detail-field-value" id="detail-assigned-to">
-            <option value="" ${!task.assignedTo ? 'selected' : ''}>Unassigned</option>
-            <option value="vin" ${task.assignedTo === 'vin' ? 'selected' : ''}>Vin</option>
-            <option value="claude" ${task.assignedTo === 'claude' ? 'selected' : ''}>Claude</option>
+            ${this.buildAssignedToOptions(task.assignedTo)}
           </select>
         </div>
       </div>
@@ -6040,14 +6152,29 @@ class TaskFlowApp {
     this.renderTodayNotes();
 
     // Get today's tasks (due today or scheduled for today), excluding done
-    const todayTasks = allTasks.filter(t =>
+    let todayTasks = allTasks.filter(t =>
       (t.dueDate === today || t.scheduledDate === today) && t.status !== 'done'
     );
 
     // Get overdue tasks
-    const overdueTasks = allTasks.filter(t =>
+    let overdueTasks = allTasks.filter(t =>
       t.dueDate && t.dueDate < today && t.status !== 'done'
     );
+
+    // Apply "My Tasks" filter if active
+    if (this.todayView.myTasksFilter && this.currentUserId) {
+      const uid = this.currentUserId;
+      todayTasks = todayTasks.filter(t => t.assignedTo === uid || !t.assignedTo);
+      overdueTasks = overdueTasks.filter(t => t.assignedTo === uid || !t.assignedTo);
+    }
+
+    // Update toggle button state in DOM
+    const toggleAll = document.querySelector('#my-tasks-toggle [data-filter="all"]');
+    const toggleMine = document.querySelector('#my-tasks-toggle [data-filter="mine"]');
+    if (toggleAll && toggleMine) {
+      toggleAll.classList.toggle('active', !this.todayView.myTasksFilter);
+      toggleMine.classList.toggle('active', this.todayView.myTasksFilter);
+    }
 
     // Combine and sort by priority (urgent first, then high, medium, low, none)
     const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 };
@@ -7947,6 +8074,14 @@ class TaskFlowApp {
   // Legacy methods removed — priority sections and completed section replaced by flat queue
 
   bindTodayViewEvents() {
+    // My Tasks toggle
+    document.querySelectorAll('#my-tasks-toggle .my-tasks-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.todayView.myTasksFilter = btn.dataset.filter === 'mine';
+        this.renderTodayView();
+      });
+    });
+
     // Plan My Day button
     const planBtn = document.getElementById('plan-my-day-btn');
     if (planBtn) {

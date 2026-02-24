@@ -1106,7 +1106,8 @@ textarea:focus-visible {
   font-size: 14px;
 }
 
-.vin-badge {
+.vin-badge,
+.member-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2496,6 +2497,127 @@ textarea:focus-visible {
   background: var(--bg-white);
   color: var(--text-primary);
   font-size: 13px;
+}
+
+.team-member-role {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.invite-role-select {
+  padding: 6px 8px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-white);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+/* Pending Invitations */
+.pending-invitations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.invitation-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.invitation-email {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.invitation-role {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.invitation-status-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.invitation-status-badge.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.invitation-cancel {
+  padding: 0 4px !important;
+  font-size: 14px !important;
+  line-height: 1 !important;
+}
+
+/* Invitation Banner (Today view) */
+.invitation-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #ede9fe 0%, #e0e7ff 100%);
+  border: 1px solid #c4b5fd;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+
+.invitation-banner.hidden {
+  display: none;
+}
+
+.invitation-banner-text {
+  flex: 1;
+  font-size: 13px;
+  color: #4c1d95;
+}
+
+.invitation-banner-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* My Tasks Toggle */
+.my-tasks-toggle {
+  display: flex;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.my-tasks-btn {
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.my-tasks-btn:hover {
+  color: var(--text-primary);
+}
+
+.my-tasks-btn.active {
+  background: var(--bg-white);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
 }
 
 .btn-danger-text {
@@ -9937,10 +10059,14 @@ textarea:focus-visible {
 .up-next-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 8px 12px;
   background: var(--bg-paper);
   border-bottom: 1px solid var(--border-light);
+}
+
+.up-next-header .up-next-label {
+  margin-right: auto;
 }
 
 .up-next-label {

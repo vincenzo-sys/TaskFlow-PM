@@ -20,6 +20,7 @@ const dataPath = path.join(app.getPath('userData'), 'taskflow-data.json');
 let _cachedData = null;
 let _teamId = null;
 let _userId = null;
+let _teamMembers = null; // cached team members
 
 /**
  * Initialize the data service with the current user's context.
@@ -121,6 +122,18 @@ async function loadAllData() {
 
   // Transform to local format
   const localData = transform.supabaseToLocal(supaData);
+
+  // Fetch team members (parallel-safe, non-blocking)
+  try {
+    const teamMembers = await getTeamMembers();
+    localData.teamMembers = teamMembers;
+  } catch (err) {
+    console.error('Failed to load team members:', err.message);
+    localData.teamMembers = [];
+  }
+
+  // Include userId for renderer
+  localData.currentUserId = _userId;
 
   // Cache for change detection
   _cachedData = localData;
@@ -572,6 +585,98 @@ async function syncTask(client, task, projectId) {
   }
 }
 
+// ── Team Members & Invitations ──────────────────────────────
+
+async function getTeamMembers() {
+  const client = await supabaseClient.getClient();
+  if (!_teamId) await init();
+
+  const { data, error } = await client
+    .from('team_members')
+    .select('user_id, role, profiles(id, display_name, email)')
+    .eq('team_id', _teamId);
+  if (error) throw error;
+
+  _teamMembers = (data || []).map(m => ({
+    userId: m.user_id,
+    role: m.role,
+    displayName: m.profiles?.display_name || m.profiles?.email || 'Unknown',
+    email: m.profiles?.email || '',
+  }));
+
+  return _teamMembers;
+}
+
+async function inviteByEmail(email, role = 'member') {
+  const client = await supabaseClient.getClient();
+  if (!_teamId) await init();
+
+  const { data, error } = await client
+    .from('team_invitations')
+    .insert({
+      team_id: _teamId,
+      invited_by: _userId,
+      email: email.trim().toLowerCase(),
+      role,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function getTeamInvitations() {
+  const client = await supabaseClient.getClient();
+  if (!_teamId) await init();
+
+  const { data, error } = await client
+    .from('team_invitations')
+    .select('*')
+    .eq('team_id', _teamId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+async function getPendingInvitationsForMe() {
+  const client = await supabaseClient.getClient();
+
+  const { data, error } = await client.rpc('get_my_pending_invitations');
+  if (error) throw error;
+  return data || [];
+}
+
+async function acceptInvitation(invitationId) {
+  const client = await supabaseClient.getClient();
+
+  const { data, error } = await client.rpc('accept_invitation', {
+    invitation_id: invitationId,
+  });
+  if (error) throw error;
+
+  // Refresh team context after accepting
+  if (data && data.team_id) {
+    _teamId = data.team_id;
+    _teamMembers = null; // bust cache
+  }
+
+  return data;
+}
+
+async function declineInvitation(invitationId) {
+  const client = await supabaseClient.getClient();
+
+  const { data, error } = await client
+    .from('team_invitations')
+    .update({ status: 'declined' })
+    .eq('id', invitationId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // ── Helpers ─────────────────────────────────────────────────
 
 function isUUID(str) {
@@ -623,6 +728,13 @@ module.exports = {
   saveRecap,
   updateWorkingOn,
   updatePreferences,
+  // Team & Invitations
+  getTeamMembers,
+  inviteByEmail,
+  getTeamInvitations,
+  getPendingInvitationsForMe,
+  acceptInvitation,
+  declineInvitation,
   // Sync
   syncChanges,
 };

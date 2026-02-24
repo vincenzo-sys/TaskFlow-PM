@@ -140,6 +140,9 @@
         <!-- Today View - Focused Task Queue -->
         <div id="command-center-view" class="task-view today-view">
           <div class="today-container">
+            <!-- Invitation Banner -->
+            <div class="invitation-banner hidden" id="invitation-banner"></div>
+
             <!-- Auto-Roll Banner -->
             <div class="today-roll-banner hidden" id="today-roll-banner">
               <span class="roll-banner-text" id="roll-banner-text"></span>
@@ -165,6 +168,10 @@
             <div class="today-up-next" id="today-up-next">
               <div class="up-next-header">
                 <span class="up-next-label">Up Next</span>
+                <div class="my-tasks-toggle" id="my-tasks-toggle">
+                  <button class="my-tasks-btn active" data-filter="all">All Tasks</button>
+                  <button class="my-tasks-btn" data-filter="mine">My Tasks</button>
+                </div>
                 <button class="btn btn-small btn-coach" id="coach-me-btn" title="Copy coaching prompt for Claude">Coach Me</button>
                 <button class="btn btn-small btn-plan-day" id="plan-my-day-btn" title="Copy Plan My Day prompt for Claude">Plan My Day</button>
               </div>
@@ -891,12 +898,18 @@
         </div>
         <div class="settings-section">
           <h4>Team Members</h4>
-          <p class="settings-text">Names available for task assignment in timeline view.</p>
+          <p class="settings-text">Members of your Supabase team.</p>
           <div id="team-members-list" class="team-members-list"></div>
+          <h4 style="margin-top:16px;">Invite by Email</h4>
           <div class="team-member-add-row">
-            <input type="text" id="team-member-input" placeholder="Add team member..." class="team-member-input">
-            <button class="btn btn-secondary btn-small" id="add-team-member-btn">Add</button>
+            <input type="email" id="invite-email-input" placeholder="Email address..." class="team-member-input">
+            <select id="invite-role-select" class="invite-role-select">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button class="btn btn-secondary btn-small" id="invite-member-btn">Send Invite</button>
           </div>
+          <div id="pending-invitations-list" class="pending-invitations-list" style="margin-top:12px;"></div>
         </div>
         <div class="settings-section">
           <h4>About</h4>

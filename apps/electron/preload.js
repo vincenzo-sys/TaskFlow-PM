@@ -39,6 +39,13 @@ contextBridge.exposeInMainWorld('api', {
     saveRecap: (recapData) => ipcRenderer.invoke('ds:save-recap', recapData),
     updateWorkingOn: (taskIds) => ipcRenderer.invoke('ds:update-working-on', taskIds),
     updatePreferences: (updates) => ipcRenderer.invoke('ds:update-preferences', updates),
+    // Team & Invitations
+    getTeamMembers: () => ipcRenderer.invoke('ds:get-team-members'),
+    inviteMember: (email, role) => ipcRenderer.invoke('ds:invite-member', email, role),
+    getInvitations: () => ipcRenderer.invoke('ds:get-invitations'),
+    getMyInvitations: () => ipcRenderer.invoke('ds:get-my-invitations'),
+    acceptInvitation: (id) => ipcRenderer.invoke('ds:accept-invitation', id),
+    declineInvitation: (id) => ipcRenderer.invoke('ds:decline-invitation', id),
   },
 
   // ── Focus Pill APIs ────────────────────────────────────────

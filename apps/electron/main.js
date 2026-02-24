@@ -563,6 +563,38 @@ ipcMain.handle('ds:load-data', async () => {
   return ds.loadAllData();
 });
 
+// ── Team & Invitation IPC Channels ───────────────────────────
+
+ipcMain.handle('ds:get-team-members', async () => {
+  const ds = await getDataService();
+  return ds.getTeamMembers();
+});
+
+ipcMain.handle('ds:invite-member', async (event, email, role) => {
+  const ds = await getDataService();
+  return ds.inviteByEmail(email, role);
+});
+
+ipcMain.handle('ds:get-invitations', async () => {
+  const ds = await getDataService();
+  return ds.getTeamInvitations();
+});
+
+ipcMain.handle('ds:get-my-invitations', async () => {
+  const ds = await getDataService();
+  return ds.getPendingInvitationsForMe();
+});
+
+ipcMain.handle('ds:accept-invitation', async (event, invitationId) => {
+  const ds = await getDataService();
+  return ds.acceptInvitation(invitationId);
+});
+
+ipcMain.handle('ds:decline-invitation', async (event, invitationId) => {
+  const ds = await getDataService();
+  return ds.declineInvitation(invitationId);
+});
+
 ipcMain.handle('export-data', async (event, data) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Export Data',
