@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export default function SignupPage() {
@@ -8,8 +9,8 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,28 +32,7 @@ export default function SignupPage() {
       return;
     }
 
-    setSuccess(true);
-    setLoading(false);
-  }
-
-  if (success) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-paper-50">
-        <div className="w-full max-w-sm animate-fade-in text-center">
-          <h1 className="text-2xl font-bold text-paper-900">Check your email</h1>
-          <p className="mt-2 text-sm text-paper-500">
-            We sent a confirmation link to <strong className="text-paper-700">{email}</strong>.
-            Click the link to activate your account.
-          </p>
-          <a
-            href="/login"
-            className="mt-6 inline-block text-sm font-medium text-accent hover:text-accent-600"
-          >
-            Back to sign in
-          </a>
-        </div>
-      </div>
-    );
+    router.push('/today');
   }
 
   return (

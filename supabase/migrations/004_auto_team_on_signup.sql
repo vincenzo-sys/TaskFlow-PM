@@ -21,30 +21,30 @@ BEGIN
   );
 
   -- 1. Create profile
-  INSERT INTO profiles (id, display_name, email)
+  INSERT INTO public.profiles (id, display_name, email)
   VALUES (NEW.id, _display_name, NEW.email);
 
   -- 2. Create a personal team
   _team_id := gen_random_uuid();
-  INSERT INTO teams (id, name, slug)
+  INSERT INTO public.teams (id, name, slug)
   VALUES (_team_id, 'Personal', 'personal-' || substr(NEW.id::text, 1, 8));
 
   -- 3. Add user as team owner
-  INSERT INTO team_members (team_id, user_id, role)
+  INSERT INTO public.team_members (team_id, user_id, role)
   VALUES (_team_id, NEW.id, 'owner');
 
   -- 4. Create default user preferences
-  INSERT INTO user_preferences (user_id, team_id)
+  INSERT INTO public.user_preferences (user_id, team_id)
   VALUES (NEW.id, _team_id);
 
   -- 5. Create default Inbox project
   _project_id := gen_random_uuid();
-  INSERT INTO projects (id, team_id, name, color, is_inbox)
+  INSERT INTO public.projects (id, team_id, name, color, is_inbox)
   VALUES (_project_id, _team_id, 'Inbox', '#6366f1', true);
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- The trigger on_auth_user_created already exists from 001_schema.sql
 -- and points to handle_new_user(), so it will pick up this new version
