@@ -1,0 +1,566 @@
+/* Analytics empty */
+.analytics-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* Responsive adjustments for execute view */
+@media (max-width: 1200px) {
+  .execute-container {
+    grid-template-columns: 240px 1fr 280px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .execute-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .execute-queue {
+    border-right: none;
+    border-bottom: 1px solid var(--border-light);
+    max-height: 200px;
+  }
+
+  .execute-context {
+    border-left: none;
+    border-top: 1px solid var(--border-light);
+  }
+}
+
+/* ============================================
+   TODAY VIEW - Priority Attack List
+   ============================================ */
+
+.today-view {
+  padding: 0;
+}
+
+.today-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Auto-Roll Banner */
+.today-roll-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border: 1px solid #fbbf24;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #92400e;
+}
+
+.today-roll-banner.hidden {
+  display: none;
+}
+
+.roll-banner-dismiss {
+  border: none;
+  background: rgba(146, 64, 14, 0.1);
+  color: #92400e;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.roll-banner-dismiss:hover {
+  background: rgba(146, 64, 14, 0.2);
+}
+
+/* Up Next Queue */
+.today-up-next {
+  background: var(--bg-white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-top: 16px;
+}
+
+.today-up-next.hidden {
+  display: none;
+}
+
+.up-next-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-paper);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.up-next-header .up-next-label {
+  margin-right: auto;
+}
+
+.up-next-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.btn-coach {
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  background: var(--exec-manual);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s;
+  letter-spacing: 0.3px;
+}
+
+.btn-coach:hover {
+  background: #059669;
+}
+
+.btn-coach.copied {
+  background: var(--exec-manual);
+}
+
+.btn-plan-day {
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  background: var(--exec-ai);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s;
+  letter-spacing: 0.3px;
+}
+
+.btn-plan-day:hover {
+  background: #4f46e5;
+}
+
+.btn-plan-day.copied {
+  background: var(--exec-manual);
+}
+
+.up-next-tasks {
+  padding: 2px 4px;
+}
+
+/* Priority Dots */
+.priority-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.priority-dot-urgent {
+  background: var(--priority-urgent);
+}
+
+.priority-dot-high {
+  background: var(--priority-high);
+}
+
+.priority-dot-medium {
+  background: var(--priority-medium);
+}
+
+.priority-dot-low {
+  background: var(--priority-low);
+}
+
+/* Working On Now Section */
+.today-working-now {
+  background: var(--bg-white);
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.today-working-now.has-task {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, var(--accent-subtle) 0%, var(--bg-white) 100%);
+}
+
+.today-working-now.drop-target {
+  border-color: var(--accent);
+  border-style: dashed;
+  background: var(--accent-light);
+  transform: scale(1.01);
+}
+
+.working-now-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--bg-paper);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.today-working-now.has-task .working-now-header {
+  background: var(--accent-light);
+  border-bottom-color: var(--accent);
+}
+
+.working-now-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.today-working-now.has-task .working-now-label {
+  color: var(--accent);
+}
+
+.working-now-clear {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.working-now-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.working-now-task {
+  padding: 16px;
+}
+
+.working-now-empty {
+  color: var(--text-muted);
+  font-size: 14px;
+  font-style: italic;
+}
+
+.working-now-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+}
+
+.working-now-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.working-now-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.working-now-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.working-now-project {
+  background: var(--bg-paper);
+  padding: 2px 10px;
+  border-radius: 4px;
+}
+
+.working-now-duration {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.working-now-subtasks {
+  color: var(--text-secondary);
+}
+
+.working-now-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Subtask List in Working On Now */
+.working-now-subtask-list {
+  padding: 6px 16px 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+.working-now-subtask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.working-now-subtask:hover {
+  color: var(--text-primary);
+}
+
+.working-now-subtask.done .working-now-subtask-name {
+  text-decoration: line-through;
+  opacity: 0.5;
+}
+
+.working-now-subtask-check {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.working-now-subtask-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Task-specific Notes (in Working On Now) */
+.working-now-notes {
+  border-top: 1px solid var(--border-light);
+  padding: 12px 16px;
+  background: var(--bg-paper);
+}
+
+.working-now-notes.hidden {
+  display: none;
+}
+
+.working-now-notes-input {
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-white);
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-primary);
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.working-now-notes-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.working-now-notes-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Active Task Cards (multiple active tasks) */
+.active-task-card {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-white);
+  overflow: hidden;
+  border-left: 3px solid var(--exec-manual);
+}
+
+.active-task-card.exec-ai {
+  border-left-color: var(--exec-ai);
+}
+
+.active-task-card.exec-hybrid {
+  border-left-color: var(--exec-hybrid);
+}
+
+.active-task-card + .active-task-card {
+  margin-top: 8px;
+}
+
+.active-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.active-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.active-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.active-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.active-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.active-card-complete {
+  font-size: 13px;
+  padding: 4px 10px;
+}
+
+.active-card-remove {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.active-card-remove:hover {
+  background: var(--bg-hover);
+  color: #ef4444;
+}
+
+.active-card-subtask-list {
+  padding: 4px 12px 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+/* Up Next Subtask Dropdown */
+.up-next-subtask-toggle {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.up-next-subtask-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.up-next-subtask-toggle.expanded {
+  transform: rotate(180deg);
+}
+
+.up-next-subtasks {
+  display: none;
+  padding: 4px 16px 8px 42px;
+  background: var(--bg-paper);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.up-next-subtasks.expanded {
+  display: block;
+}
+
+/* Daily Notes (for recaps) */
+.today-daily-notes {
+  background: var(--bg-white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.daily-notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--bg-paper);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.daily-notes-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.daily-notes-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.daily-notes-input {
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-primary);
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.daily-notes-input:focus {
+  outline: none;
+  background: var(--accent-subtle);
+}
+
+.daily-notes-input::placeholder {
+  color: var(--text-muted);
+}
+

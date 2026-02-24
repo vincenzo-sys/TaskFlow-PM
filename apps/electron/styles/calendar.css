@@ -1,0 +1,418 @@
+/* Month View Container */
+.calendar-month-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.calendar-month-view.hidden {
+  display: none;
+}
+
+/* ============================================
+   CALENDAR WEEK VIEW
+   ============================================ */
+
+.calendar-week-view {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.calendar-week-view.hidden {
+  display: none;
+}
+
+.week-header {
+  display: grid;
+  grid-template-columns: 60px repeat(7, 1fr);
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-paper);
+}
+
+.week-time-column {
+  padding: 12px 8px;
+}
+
+.week-day-header {
+  padding: 12px 8px;
+  text-align: center;
+  border-left: 1px solid var(--border-light);
+}
+
+.week-day-header.today {
+  background: var(--accent-subtle);
+}
+
+.week-day-name {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.week-day-date {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 4px;
+}
+
+.week-day-header.today .week-day-date {
+  color: var(--accent);
+}
+
+.week-grid {
+  display: grid;
+  grid-template-columns: 60px repeat(7, 1fr);
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.week-time-slot {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  height: 20px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.week-cell {
+  border-left: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+  min-height: 20px;
+  position: relative;
+  transition: background 0.15s ease;
+}
+
+.week-cell:nth-child(8n+2):nth-child(-n+8) {
+  /* First row after time column */
+}
+
+.week-cell.today {
+  background: var(--accent-subtle);
+}
+
+.week-cell.drag-over {
+  background: var(--accent-light);
+}
+
+.week-task-block {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 0;
+  background: var(--accent);
+  color: white;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 1;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.week-task-block:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.week-task-block.priority-urgent {
+  background: var(--danger);
+}
+
+.week-task-block.priority-high {
+  background: var(--priority-high);
+}
+
+.week-task-block.priority-medium {
+  background: var(--priority-medium);
+}
+
+.week-task-block.priority-low {
+  background: var(--success);
+}
+
+.week-task-block.priority-none {
+  background: var(--text-secondary);
+}
+
+.week-task-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================
+   CALENDAR DAY VIEW
+   ============================================ */
+
+.calendar-day-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.calendar-day-view.hidden {
+  display: none;
+}
+
+.day-header {
+  padding: 16px 20px;
+  background: var(--bg-white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+
+.day-header-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.day-header-content.today {
+  color: var(--accent);
+}
+
+.day-header-date {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.day-header-label {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.day-header-content.today .day-header-label {
+  color: var(--accent);
+}
+
+.day-timeline {
+  background: var(--bg-white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.day-time-row {
+  display: flex;
+  min-height: 24px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.day-time-row.hour-start {
+  border-bottom-color: var(--border-medium);
+}
+
+.day-time-label {
+  width: 70px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: right;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-light);
+}
+
+.day-time-slot {
+  flex: 1;
+  position: relative;
+  min-height: 24px;
+  transition: background 0.15s ease;
+}
+
+.day-time-slot.drag-over {
+  background: var(--accent-light);
+}
+
+.day-task-block {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 2px;
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  cursor: pointer;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.day-task-block.priority-urgent {
+  background: var(--danger);
+}
+
+.day-task-block.priority-high {
+  background: #ea580c;
+}
+
+.day-task-block.priority-medium {
+  background: #ca8a04;
+}
+
+.day-task-block.priority-low {
+  background: var(--success);
+}
+
+.day-task-block.priority-none {
+  background: var(--text-secondary);
+}
+
+.day-task-block .day-task-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.day-task-block .day-task-time {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+/* Unscheduled Tasks */
+.day-unscheduled {
+  background: var(--bg-white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.day-unscheduled-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.day-unscheduled-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.day-unscheduled-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.day-unscheduled-task {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-paper);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  transition: all 0.15s ease;
+}
+
+.day-unscheduled-task:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.day-unscheduled-task.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.day-unscheduled-task .day-task-name {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.day-unscheduled-task .day-task-duration {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.day-unscheduled-task.priority-urgent {
+  border-left: 3px solid var(--danger);
+}
+
+.day-unscheduled-task.priority-high {
+  border-left: 3px solid #ea580c;
+}
+
+.day-unscheduled-task.priority-medium {
+  border-left: 3px solid #ca8a04;
+}
+
+.day-unscheduled-task.priority-low {
+  border-left: 3px solid var(--success);
+}
+
+/* MCP Tools Modal */
+.mcp-tools-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.mcp-intro {
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  padding: 12px;
+  background: var(--bg-hover);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.mcp-section {
+  margin-bottom: 24px;
+}
+
+.mcp-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.mcp-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+.mcp-tool {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  background: var(--bg-paper);
+  border-radius: 6px;
+  border: 1px solid var(--border-light);
+}
+
+.mcp-tool code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-light);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-right: 6px;
+}
+
+/* ============================================
+   ENHANCED PROJECT VIEW
+   ============================================ */

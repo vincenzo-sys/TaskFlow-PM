@@ -1,0 +1,142 @@
+/* TaskFlow PM - Calm & Focused Design (Step 5 Polish) */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Paper-like colors - slightly warmer & softer */
+  --bg-paper: #faf9f7;
+  --bg-white: #ffffff;
+  --bg-hover: #f7f6f4;
+  --bg-active: #eeece8;
+  --bg-sidebar: #ffffff;
+
+  /* Text colors - warm greys, improved readability */
+  --text-primary: #292524;
+  --text-secondary: #6b6560;
+  --text-muted: #a8a29e;
+  --text-light: #d6d3d1;
+
+  /* Accent - softer, less saturated warm orange (Sunsama-inspired) */
+  --accent: #d97448;
+  --accent-light: #fce8dc;
+  --accent-hover: #c45f36;
+  --accent-subtle: #fdf8f5;
+
+  /* Status colors - softer tones */
+  --success: #059669;
+  --success-light: #d1fae5;
+  --warning: #ca8a04;
+  --warning-light: #fef3c7;
+  --danger: #dc2626;
+  --danger-light: #fee2e2;
+
+  /* Borders - softer */
+  --border-light: #eae8e4;
+  --border-medium: #dbd8d3;
+
+  /* Shadows - subtler floating effect */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 3px 12px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.06);
+
+  /* Spacing & Radius - slightly larger for breathing room */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  /* Animation - smooth, not jarring */
+  --transition: 200ms ease;
+  --transition-fast: 120ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Spacing scale for +25% padding */
+  --space-xs: 6px;
+  --space-sm: 10px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Priority colors */
+  --priority-urgent: #dc2626;
+  --priority-urgent-light: #fef2f2;
+  --priority-high: #f97316;
+  --priority-high-light: #fff7ed;
+  --priority-medium: #eab308;
+  --priority-medium-light: #fefce8;
+  --priority-low: #22c55e;
+  --priority-low-light: #f0fdf4;
+  --priority-none: var(--border-medium);
+
+  /* Execution type colors */
+  --exec-ai: #6366f1;
+  --exec-ai-light: #eef2ff;
+  --exec-manual: #10b981;
+  --exec-manual-light: #ecfdf5;
+  --exec-hybrid: #60a5fa;
+  --exec-hybrid-light: #f0f9ff;
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.7; /* Improved readability */
+  color: var(--text-primary);
+  background: var(--bg-paper);
+  overflow: hidden;
+  -webkit-app-region: drag;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  -webkit-app-region: no-drag;
+}
+
+/* Global Focus Indicators for Accessibility */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--accent-light);
+}
+
+/* Smooth view transitions */
+.task-view.active {
+  animation: viewFadeIn 0.15s ease-out;
+}
+
+@keyframes viewFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Selection highlight */
+::selection {
+  background: var(--accent-light);
+  color: var(--accent-hover);
+}
+
+/* Utility classes */
+.hidden {
+  display: none !important;
+}
