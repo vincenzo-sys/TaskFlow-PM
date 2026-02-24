@@ -28,10 +28,9 @@ export function ImportView({ teamId, userId }: ImportViewProps) {
   const { showToast } = useToast();
   const supabase = getSupabaseBrowserClient();
 
-  const handleFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const [dragOver, setDragOver] = useState(false);
 
+  const processFile = useCallback(async (file: File) => {
     try {
       const text = await file.text();
       const local: LocalData = JSON.parse(text);
@@ -48,6 +47,33 @@ export function ImportView({ teamId, userId }: ImportViewProps) {
       setStep('error');
     }
   }, [teamId, userId]);
+
+  const handleFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+  }, [processFile]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.name.endsWith('.json')) {
+      processFile(file);
+    } else {
+      setErrorMsg('Please drop a .json file');
+      setStep('error');
+    }
+  }, [processFile]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOver(false);
+  }, []);
 
   const runImport = useCallback(async () => {
     if (!result) return;
@@ -163,9 +189,16 @@ export function ImportView({ teamId, userId }: ImportViewProps) {
       {/* Upload Step */}
       {step === 'upload' && (
         <div className="mt-8">
-          <label
-            htmlFor="file-upload"
-            className="flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-paper-300 bg-paper-50 px-6 py-12 transition hover:border-indigo-400 hover:bg-indigo-50/30"
+          <div
+            onClick={() => fileRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            className={`flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed px-6 py-12 transition ${
+              dragOver
+                ? 'border-indigo-500 bg-indigo-50/50'
+                : 'border-paper-300 bg-paper-50 hover:border-indigo-400 hover:bg-indigo-50/30'
+            }`}
           >
             <svg className="h-10 w-10 text-paper-400" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
@@ -174,13 +207,12 @@ export function ImportView({ teamId, userId }: ImportViewProps) {
               Click to upload or drag and drop
             </span>
             <span className="mt-1 text-xs text-paper-400">taskflow-data.json</span>
-          </label>
+          </div>
           <input
             ref={fileRef}
-            id="file-upload"
             type="file"
             accept=".json"
-            className="hidden"
+            style={{ display: 'none' }}
             onChange={handleFile}
           />
 
