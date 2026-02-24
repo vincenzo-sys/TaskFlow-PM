@@ -705,6 +705,24 @@ textarea:focus-visible {
   flex: 1;
 }
 
+.project-header-share {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  transition: all var(--transition);
+  margin-left: auto;
+}
+
+.project-header-share:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.05);
+}
+
 .project-header-edit {
   background: transparent;
   border: none;

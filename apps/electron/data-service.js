@@ -622,6 +622,24 @@ async function inviteByEmail(email, role = 'member') {
     .select()
     .single();
   if (error) throw error;
+
+  // Send email notification (non-blocking — don't fail the invite if email fails)
+  try {
+    const { data: team } = await client.from('teams').select('name').eq('id', _teamId).single();
+    const { data: profile } = await client.from('profiles').select('display_name').eq('id', _userId).single();
+
+    await client.functions.invoke('send-invitation-email', {
+      body: {
+        email: email.trim().toLowerCase(),
+        teamName: team?.name || 'a team',
+        invitedByName: profile?.display_name || 'A teammate',
+        role,
+      },
+    });
+  } catch (emailErr) {
+    console.error('Invitation email failed (invite still created):', emailErr.message);
+  }
+
   return data;
 }
 
@@ -675,6 +693,70 @@ async function declineInvitation(invitationId) {
     .single();
   if (error) throw error;
   return data;
+}
+
+// ── Project Members ─────────────────────────────────────────
+
+async function getProjectMembers(projectId) {
+  const client = await supabaseClient.getClient();
+  if (!_teamId) await init();
+
+  const { data, error } = await client
+    .from('project_members')
+    .select('project_id, user_id, role, added_at, profiles:user_id(display_name, email)')
+    .eq('project_id', projectId);
+  if (error) throw error;
+  return (data || []).map(m => ({
+    projectId: m.project_id,
+    userId: m.user_id,
+    role: m.role,
+    addedAt: m.added_at,
+    displayName: m.profiles?.display_name || m.profiles?.email || 'Unknown',
+    email: m.profiles?.email || '',
+  }));
+}
+
+async function addProjectMember(projectId, userId, role = 'editor') {
+  const client = await supabaseClient.getClient();
+  if (!_teamId) await init();
+
+  const { data, error } = await client
+    .from('project_members')
+    .upsert({
+      project_id: projectId,
+      user_id: userId,
+      role,
+      added_by: _userId,
+    }, { onConflict: 'project_id,user_id' })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function updateProjectMemberRole(projectId, userId, role) {
+  const client = await supabaseClient.getClient();
+
+  const { data, error } = await client
+    .from('project_members')
+    .update({ role })
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+async function removeProjectMember(projectId, userId) {
+  const client = await supabaseClient.getClient();
+
+  const { error } = await client
+    .from('project_members')
+    .delete()
+    .eq('project_id', projectId)
+    .eq('user_id', userId);
+  if (error) throw error;
 }
 
 // ── Helpers ─────────────────────────────────────────────────
@@ -735,6 +817,11 @@ module.exports = {
   getPendingInvitationsForMe,
   acceptInvitation,
   declineInvitation,
+  // Project Members
+  getProjectMembers,
+  addProjectMember,
+  updateProjectMemberRole,
+  removeProjectMember,
   // Sync
   syncChanges,
 };

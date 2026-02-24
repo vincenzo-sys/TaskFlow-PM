@@ -595,6 +595,27 @@ ipcMain.handle('ds:decline-invitation', async (event, invitationId) => {
   return ds.declineInvitation(invitationId);
 });
 
+// ── Project Members ──────────────────────────────────────────
+ipcMain.handle('ds:get-project-members', async (event, projectId) => {
+  const ds = await getDataService();
+  return ds.getProjectMembers(projectId);
+});
+
+ipcMain.handle('ds:add-project-member', async (event, projectId, userId, role) => {
+  const ds = await getDataService();
+  return ds.addProjectMember(projectId, userId, role);
+});
+
+ipcMain.handle('ds:update-project-member-role', async (event, projectId, userId, role) => {
+  const ds = await getDataService();
+  return ds.updateProjectMemberRole(projectId, userId, role);
+});
+
+ipcMain.handle('ds:remove-project-member', async (event, projectId, userId) => {
+  const ds = await getDataService();
+  return ds.removeProjectMember(projectId, userId);
+});
+
 ipcMain.handle('export-data', async (event, data) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Export Data',

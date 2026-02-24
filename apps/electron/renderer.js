@@ -4020,7 +4020,7 @@ class TaskFlowApp {
 
     try {
       await window.api.ds.inviteMember(email, role);
-      this.showToast(`Invitation sent to ${email}`);
+      this.showToast(`Invitation sent to ${email} (email notification sent)`);
       emailInput.value = '';
       this.renderPendingInvitations();
     } catch (err) {
@@ -4077,6 +4077,127 @@ class TaskFlowApp {
       // Silently fail — invitations are not critical
       console.error('Failed to check invitations:', err.message);
     }
+  }
+
+  async openProjectMembersModal(projectId) {
+    const project = this.data.projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    // Get team members and current project members
+    const teamMembers = this.data.teamMembers || [];
+    let projectMembers = [];
+    try {
+      projectMembers = await window.api.ds.getProjectMembers(projectId);
+    } catch (err) {
+      // If table doesn't exist yet (migration not run), show empty
+      console.error('Could not load project members:', err.message);
+    }
+
+    const pmUserIds = new Set(projectMembers.map(pm => pm.userId));
+
+    // Build modal HTML
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:480px;">
+        <div class="modal-header">
+          <h3>Share: ${this.escapeHtml(project.name)}</h3>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:16px;">
+          <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px;">
+            ${projectMembers.length === 0
+              ? 'No specific members — visible to all team members (default).'
+              : `${projectMembers.length} member${projectMembers.length !== 1 ? 's' : ''} — only these members can access this project.`}
+          </p>
+
+          <div id="pm-current-members" style="margin-bottom:16px;">
+            ${projectMembers.map(pm => `
+              <div class="team-member-chip" style="justify-content:space-between;margin-bottom:4px;">
+                <span>${this.escapeHtml(pm.displayName)} <small style="color:var(--text-muted)">${this.escapeHtml(pm.email)}</small></span>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <select class="pm-role-select" data-user-id="${pm.userId}" style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;">
+                    <option value="viewer" ${pm.role === 'viewer' ? 'selected' : ''}>Viewer</option>
+                    <option value="editor" ${pm.role === 'editor' ? 'selected' : ''}>Editor</option>
+                    <option value="admin" ${pm.role === 'admin' ? 'selected' : ''}>Admin</option>
+                  </select>
+                  <button class="btn btn-small btn-danger pm-remove" data-user-id="${pm.userId}" title="Remove">&times;</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+
+          <h4 style="font-size:13px;font-weight:600;margin:0 0 8px;">Add team member</h4>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="pm-add-member-select" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+              <option value="">Select a team member...</option>
+              ${teamMembers.filter(tm => !pmUserIds.has(tm.userId)).map(tm => `
+                <option value="${tm.userId}">${this.escapeHtml(tm.displayName)} (${this.escapeHtml(tm.email)})</option>
+              `).join('')}
+            </select>
+            <select id="pm-add-role-select" style="padding:6px 4px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+              <option value="editor">Editor</option>
+              <option value="viewer">Viewer</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button class="btn btn-small btn-primary" id="pm-add-btn">Add</button>
+          </div>
+
+          <p style="font-size:11px;color:var(--text-muted);margin:12px 0 0;">
+            Tip: If no members are added, the project is visible to everyone on the team.
+            Adding specific members restricts access to only those people (plus team admins).
+          </p>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Close modal
+    const close = () => overlay.remove();
+    overlay.querySelector('.modal-close').addEventListener('click', close);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    // Add member
+    overlay.querySelector('#pm-add-btn').addEventListener('click', async () => {
+      const userId = overlay.querySelector('#pm-add-member-select').value;
+      const role = overlay.querySelector('#pm-add-role-select').value;
+      if (!userId) return;
+      try {
+        await window.api.ds.addProjectMember(projectId, userId, role);
+        this.showToast('Member added');
+        close();
+        this.openProjectMembersModal(projectId); // Re-open to refresh
+      } catch (err) {
+        this.showToast('Failed: ' + err.message);
+      }
+    });
+
+    // Change role
+    overlay.querySelectorAll('.pm-role-select').forEach(select => {
+      select.addEventListener('change', async () => {
+        try {
+          await window.api.ds.updateProjectMemberRole(projectId, select.dataset.userId, select.value);
+          this.showToast('Role updated');
+        } catch (err) {
+          this.showToast('Failed: ' + err.message);
+        }
+      });
+    });
+
+    // Remove member
+    overlay.querySelectorAll('.pm-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          await window.api.ds.removeProjectMember(projectId, btn.dataset.userId);
+          this.showToast('Member removed');
+          close();
+          this.openProjectMembersModal(projectId); // Re-open to refresh
+        } catch (err) {
+          this.showToast('Failed: ' + err.message);
+        }
+      });
+    });
   }
 
   openProjectModal(projectId = null) {
@@ -11392,6 +11513,7 @@ class TaskFlowApp {
       <div class="project-header-top">
         <span class="project-header-color" style="background:${project.color}"></span>
         <h2 class="project-header-name">${this.escapeHtml(project.name)}</h2>
+        <button class="project-header-share" title="Manage Members">&#128101; Share</button>
         <button class="project-header-edit" title="Edit Project">&#9998;</button>
       </div>
       ${project.goal ? `<p class="project-header-goal">${this.escapeHtml(project.goal)}</p>` : ''}
@@ -11406,6 +11528,9 @@ class TaskFlowApp {
       </div>
     `;
 
+    header.querySelector('.project-header-share').addEventListener('click', () => {
+      this.openProjectMembersModal(project.id);
+    });
     header.querySelector('.project-header-edit').addEventListener('click', () => {
       this.openProjectModal(project.id);
     });

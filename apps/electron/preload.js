@@ -46,6 +46,11 @@ contextBridge.exposeInMainWorld('api', {
     getMyInvitations: () => ipcRenderer.invoke('ds:get-my-invitations'),
     acceptInvitation: (id) => ipcRenderer.invoke('ds:accept-invitation', id),
     declineInvitation: (id) => ipcRenderer.invoke('ds:decline-invitation', id),
+    // Project Members
+    getProjectMembers: (projectId) => ipcRenderer.invoke('ds:get-project-members', projectId),
+    addProjectMember: (projectId, userId, role) => ipcRenderer.invoke('ds:add-project-member', projectId, userId, role),
+    updateProjectMemberRole: (projectId, userId, role) => ipcRenderer.invoke('ds:update-project-member-role', projectId, userId, role),
+    removeProjectMember: (projectId, userId) => ipcRenderer.invoke('ds:remove-project-member', projectId, userId),
   },
 
   // ── Focus Pill APIs ────────────────────────────────────────
