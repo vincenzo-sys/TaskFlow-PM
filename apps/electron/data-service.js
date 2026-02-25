@@ -290,6 +290,15 @@ async function createProject(projectData) {
     .select()
     .single();
   if (error) throw error;
+
+  // Auto-add creator as admin so the project is private by default
+  if (!data.is_inbox) {
+    await client
+      .from('project_members')
+      .insert({ project_id: data.id, user_id: _userId, role: 'admin', added_by: _userId })
+      .catch(err => console.error('Failed to auto-add project owner:', err.message));
+  }
+
   return data;
 }
 
