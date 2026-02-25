@@ -440,6 +440,14 @@ export const ModalsMixin = {
             <button class="btn btn-small btn-primary" id="pm-add-btn">Add</button>
           </div>
 
+          <div style="border-top:1px solid var(--border-light);margin:16px 0;"></div>
+          <h4 style="font-size:13px;font-weight:600;margin:0 0 8px;">Invite by code</h4>
+          <p style="font-size:12px;color:var(--text-muted);margin:0 0 8px;">Generate a shareable code — anyone with it can join this project.</p>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-small btn-secondary" id="pm-generate-code-btn">Generate Code</button>
+          </div>
+          <div id="pm-invite-code-display" class="invite-code-display hidden" style="margin-top:10px;"></div>
+
           <p style="font-size:11px;color:var(--text-muted);margin:12px 0 0;">
             Tip: If no members are added, the project is visible to everyone on the team.
             Adding specific members restricts access to only those people (plus team admins).
@@ -454,6 +462,27 @@ export const ModalsMixin = {
     const close = () => overlay.remove();
     overlay.querySelector('.modal-close-btn').addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    // Generate project invite code
+    overlay.querySelector('#pm-generate-code-btn').addEventListener('click', async () => {
+      try {
+        const result = await window.api.ds.createInviteCode('member', projectId);
+        if (!result || !result.code) throw new Error('No code returned');
+        const display = overlay.querySelector('#pm-invite-code-display');
+        display.innerHTML = `
+          <span class="invite-code-value">${this.escapeHtml(result.code)}</span>
+          <span class="invite-code-meta">Expires in 7 days</span>
+          <button class="btn btn-secondary btn-small invite-code-copy" id="pm-copy-code-btn">Copy</button>
+        `;
+        display.classList.remove('hidden');
+        display.querySelector('#pm-copy-code-btn').addEventListener('click', async () => {
+          await window.api.copyToClipboard(result.code);
+          this.showToast('Invite code copied!');
+        });
+      } catch (err) {
+        this.showToast('Failed to generate code: ' + (err.message || 'Unknown error'));
+      }
+    });
 
     // Add member
     overlay.querySelector('#pm-add-btn').addEventListener('click', async () => {

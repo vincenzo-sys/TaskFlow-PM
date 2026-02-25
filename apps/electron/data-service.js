@@ -770,10 +770,12 @@ async function declineInvitation(invitationId) {
 }
 
 /**
- * Create a shareable invite code for the current team.
+ * Create a shareable invite code for the current team (and optionally a specific project).
  * Generates a random 8-char alphanumeric code and inserts a code-based invitation.
+ * @param {string} role - Team role: 'member' or 'admin'
+ * @param {string|null} projectId - Optional project UUID to scope the invite to
  */
-async function createInviteCode(role = 'member') {
+async function createInviteCode(role = 'member', projectId = null) {
   const client = await supabaseClient.getClient();
   if (!_teamId) await init();
 
@@ -785,16 +787,19 @@ async function createInviteCode(role = 'member') {
     code += chars[bytes[i] % chars.length];
   }
 
+  const row = {
+    team_id: _teamId,
+    invited_by: _userId,
+    email: null,
+    role,
+    invite_code: code,
+    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+  };
+  if (projectId) row.project_id = projectId;
+
   const { data, error } = await client
     .from('team_invitations')
-    .insert({
-      team_id: _teamId,
-      invited_by: _userId,
-      email: null,
-      role,
-      invite_code: code,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
-    })
+    .insert(row)
     .select()
     .single();
   if (error) throw error;

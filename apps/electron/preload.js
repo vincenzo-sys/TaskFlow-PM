@@ -46,7 +46,7 @@ contextBridge.exposeInMainWorld('api', {
     getMyInvitations: () => ipcRenderer.invoke('ds:get-my-invitations'),
     acceptInvitation: (id) => ipcRenderer.invoke('ds:accept-invitation', id),
     declineInvitation: (id) => ipcRenderer.invoke('ds:decline-invitation', id),
-    createInviteCode: (role) => ipcRenderer.invoke('ds:create-invite-code', role),
+    createInviteCode: (role, projectId) => ipcRenderer.invoke('ds:create-invite-code', role, projectId),
     acceptInviteCode: (code) => ipcRenderer.invoke('ds:accept-invite-code', code),
     // Project Members
     getProjectMembers: (projectId) => ipcRenderer.invoke('ds:get-project-members', projectId),

@@ -620,9 +620,9 @@ ipcMain.handle('ds:decline-invitation', async (event, invitationId) => {
   return ds.declineInvitation(invitationId);
 });
 
-ipcMain.handle('ds:create-invite-code', async (event, role) => {
+ipcMain.handle('ds:create-invite-code', async (event, role, projectId) => {
   const ds = await getDataService();
-  return ds.createInviteCode(role);
+  return ds.createInviteCode(role, projectId);
 });
 
 ipcMain.handle('ds:accept-invite-code', async (event, code) => {
