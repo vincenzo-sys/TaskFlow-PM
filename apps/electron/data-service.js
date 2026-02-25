@@ -926,7 +926,11 @@ async function backfillProjectOwnership() {
       const { error } = await client
         .from('project_members')
         .insert({ project_id: p.id, user_id: _userId, role: 'admin', added_by: _userId });
-      if (!error) added++;
+      if (error) {
+        console.error(`Backfill failed for project ${p.id}:`, error.message);
+      } else {
+        added++;
+      }
     }
   }
 

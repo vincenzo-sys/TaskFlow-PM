@@ -203,6 +203,16 @@ export const ModalsMixin = {
     return member ? member.displayName : assignedTo;
   },
 
+  /**
+   * Get the project owner (first admin in project.members).
+   * Returns { displayName, userId } or null.
+   */
+  getProjectOwner(project) {
+    const members = project.members || [];
+    const admin = members.find(m => m.role === 'admin');
+    return admin || null;
+  },
+
   renderTeamMembersList() {
     const container = document.getElementById('team-members-list');
     if (!container) return;
@@ -391,6 +401,7 @@ export const ModalsMixin = {
     }
 
     const pmUserIds = new Set(projectMembers.map(pm => pm.userId));
+    const ownerMember = projectMembers.find(pm => pm.role === 'admin');
 
     // Build modal HTML
     const overlay = document.createElement('div');
@@ -402,6 +413,13 @@ export const ModalsMixin = {
           <button class="modal-close-btn">&times;</button>
         </div>
         <div class="modal-body" style="padding:16px;">
+          ${ownerMember ? `
+          <div class="share-modal-owner">
+            <span class="owner-avatar">${this.escapeHtml(ownerMember.displayName.charAt(0).toUpperCase())}</span>
+            <span style="font-size:13px;font-weight:500;">${this.escapeHtml(ownerMember.displayName)}</span>
+            <span class="share-owner-badge">Owner</span>
+          </div>
+          ` : ''}
           <p style="font-size:13px;color:var(--text-muted);margin:0 0 12px;">
             ${projectMembers.length === 0
               ? 'No specific members — visible to all team members (default).'
