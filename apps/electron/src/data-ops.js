@@ -13,7 +13,7 @@ export const DataOpsMixin = {
   },
 
   generateId() {
-    // Use UUID for Supabase compatibility
+    // Use UUID for consistent ID generation
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }

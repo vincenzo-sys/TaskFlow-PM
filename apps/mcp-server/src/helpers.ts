@@ -48,3 +48,30 @@ export function formatTaskForDisplay(task: any, project: any, tags: any[]): stri
 export function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }
+
+/**
+ * Auto-roll stale tasks forward to today (in-place mutation).
+ * Mirrors the Electron renderer's autoRollTasks() behavior.
+ * Returns the number of tasks rolled forward.
+ */
+export function autoRollTasks(data: any): number {
+  const today = todayDate();
+  let rolled = 0;
+  for (const project of data.projects || []) {
+    for (const task of project.tasks || []) {
+      if (task.status === 'done') continue;
+      let changed = false;
+      if (task.scheduledDate && task.scheduledDate < today) {
+        task.scheduledDate = today;
+        task.scheduledTime = null;
+        changed = true;
+      }
+      if (task.dueDate && task.dueDate < today) {
+        task.dueDate = today;
+        changed = true;
+      }
+      if (changed) rolled++;
+    }
+  }
+  return rolled;
+}

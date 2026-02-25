@@ -62,7 +62,6 @@ export class TaskFlowApp {
       aiMessages: []
     };
 
-    // Current user ID (from Supabase)
     this.currentUserId = null;
 
     // Timeline view mode: 'single' or 'dual'
@@ -88,10 +87,7 @@ export const CoreMixin = {
   async init() {
     this.data = await window.api.loadData();
 
-    // Store current user ID for filtering
-    this.currentUserId = this.data.currentUserId || null;
-
-    // Ensure teamMembers array exists
+    // Ensure teamMembers array exists (for assignee dropdowns)
     if (!this.data.teamMembers) this.data.teamMembers = [];
 
     // Migrate old single workingOnTaskId to array
@@ -116,9 +112,6 @@ export const CoreMixin = {
     this.setupFocusReturnRefresh();
     this.render();
 
-    // Check for pending team invitations
-    this.checkPendingInvitationsForMe();
-
     // Listen for quick capture
     window.api.onTaskCaptured((task) => {
       this.handleTaskCaptured(task);
@@ -140,21 +133,6 @@ export const CoreMixin = {
       this.removeActiveTask(taskId);
       this.updateFloatingBar();
       this.render();
-    });
-
-    // Listen for realtime changes from teammates
-    window.api.onRealtimeChange?.(async (change) => {
-      console.log(`Realtime: ${change.eventType} on ${change.table}`);
-      try {
-        const freshData = await window.api.loadData();
-        // Preserve local-only state
-        const workingOnTaskIds = this.data.workingOnTaskIds;
-        this.data = freshData;
-        if (workingOnTaskIds) this.data.workingOnTaskIds = workingOnTaskIds;
-        this.render();
-      } catch (err) {
-        console.error('Realtime refresh failed:', err.message);
-      }
     });
 
   },

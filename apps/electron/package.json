@@ -10,7 +10,6 @@
     "build": "npm run bundle && electron-builder"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0",
     "@taskflow/shared": "*"
   },
   "devDependencies": {

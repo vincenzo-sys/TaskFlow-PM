@@ -2,6 +2,15 @@
 
 export const NavigationMixin = {
   setView(view) {
+    try {
+      this._setViewInner(view);
+    } catch (err) {
+      console.error('[setView] ERROR switching to', view, err);
+      document.title = `ERROR: ${err.message}`;
+    }
+  },
+
+  _setViewInner(view) {
     this.currentView = view;
     document.querySelectorAll('.nav-item[data-view]').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.view === view);
@@ -148,6 +157,13 @@ export const NavigationMixin = {
 
   // Rendering
   render() {
+    try { return this._renderInner(); } catch (err) {
+      console.error('[render] ERROR:', err);
+      document.title = `RENDER ERROR: ${err.message}`;
+    }
+  },
+
+  _renderInner() {
     this.renderProjects();
     this.renderTags();
     this.updateCounts();

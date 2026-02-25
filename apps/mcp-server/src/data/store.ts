@@ -7,7 +7,7 @@ export interface DataStore {
 
   /**
    * Load all data in the nested local format (projects with tasks, etc.).
-   * May be sync (LocalDataStore) or async (SupabaseDataStore).
+   * May be sync or async depending on the implementation.
    */
   loadData(): any | Promise<any>;
 

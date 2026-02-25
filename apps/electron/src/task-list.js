@@ -629,14 +629,10 @@ export const TaskListMixin = {
     const header = document.createElement('div');
     header.className = 'project-header-card';
 
-    const owner = this.getProjectOwner(project);
-    const ownerHtml = owner ? `<span class="project-header-owner" title="Owner: ${this.escapeHtml(owner.displayName)}"><span class="owner-avatar">${this.escapeHtml(owner.displayName.charAt(0).toUpperCase())}</span>${this.escapeHtml(owner.displayName)}</span>` : '';
-
     header.innerHTML = `
       <div class="project-header-top">
         <span class="project-header-color" style="background:${project.color}"></span>
         <h2 class="project-header-name">${this.escapeHtml(project.name)}</h2>
-        ${ownerHtml}
         <span class="project-status-badge ${status.class}">${status.icon} ${status.label}</span>
         <button class="project-header-edit" title="Edit Project">&#9998;</button>
       </div>

@@ -57,35 +57,7 @@ export const EventsMixin = {
     // Settings button
     document.getElementById('settings-btn').addEventListener('click', () => {
       this.updateFontSizeDisplay();
-      this.renderTeamMembersList();
-      this.renderPendingInvitations();
-      // Show account email
-      const emailEl = document.getElementById('account-email-display');
-      if (emailEl) {
-        const session = this.data.currentUserId ? `Signed in as user ${this.data.currentUserId.slice(0, 8)}...` : 'Not signed in';
-        emailEl.textContent = session;
-      }
       this.openModal('settings-modal');
-    });
-
-    // Logout button
-    document.getElementById('logout-btn')?.addEventListener('click', async () => {
-      if (confirm('Log out? The app will restart and show the login screen.')) {
-        await window.api.auth.logout();
-      }
-    });
-
-    // Team member invitation
-    document.getElementById('invite-member-btn')?.addEventListener('click', () => this.inviteTeamMember());
-    document.getElementById('invite-email-input')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); this.inviteTeamMember(); }
-    });
-
-    // Invite code generation & join team
-    document.getElementById('generate-invite-code-btn')?.addEventListener('click', () => this.generateInviteCode());
-    document.getElementById('join-team-btn')?.addEventListener('click', () => this.joinTeamByCode());
-    document.getElementById('join-team-code-input')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); this.joinTeamByCode(); }
     });
 
     // Modal close buttons

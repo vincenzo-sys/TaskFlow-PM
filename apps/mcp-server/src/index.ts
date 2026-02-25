@@ -2,7 +2,6 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { DataStore } from './data/store.js';
 import { LocalDataStore } from './data/local-store.js';
-import { SupabaseDataStore } from './data/supabase-store.js';
 import { getAllTasks, formatTaskForDisplay } from './helpers.js';
 
 // Tool registrations
@@ -25,21 +24,9 @@ const server = new McpServer({
   version: '1.0.0',
 });
 
-// ── Initialize data store (Supabase-first, local fallback) ───────────
+// ── Initialize data store (local JSON) ────────────────────────────────
 
 let store: DataStore;
-
-async function initStore(): Promise<DataStore> {
-  try {
-    const supaStore = new SupabaseDataStore();
-    await supaStore.init();
-    console.error('Using Supabase data store');
-    return supaStore;
-  } catch (err: any) {
-    console.error('Supabase unavailable, using local store:', err.message);
-    return new LocalDataStore();
-  }
-}
 
 // ── Resources ─────────────────────────────────────────────────────────
 
@@ -122,7 +109,7 @@ function registerAllTools(s: McpServer, st: DataStore): void {
 // ── Start Server ──────────────────────────────────────────────────────
 
 async function main() {
-  store = await initStore();
+  store = new LocalDataStore();
   registerAllTools(server, store);
 
   const transport = new StdioServerTransport();

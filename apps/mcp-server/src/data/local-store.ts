@@ -2,23 +2,35 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { DataStore } from './store.js';
+import { autoRollTasks } from '../helpers.js';
 
+// Electron userData path: @taskflow/electron (from monorepo package name)
 const DATA_PATH = path.join(
   process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
-  'taskflow-pm',
+  '@taskflow',
+  'electron',
   'taskflow-data.json'
 );
 
 export class LocalDataStore implements DataStore {
   loadData(): any {
+    let data: any = { projects: [], tags: [], settings: {} };
     try {
       if (fs.existsSync(DATA_PATH)) {
-        return JSON.parse(fs.readFileSync(DATA_PATH, 'utf-8'));
+        data = JSON.parse(fs.readFileSync(DATA_PATH, 'utf-8'));
       }
     } catch (error) {
       console.error('Error loading data:', error);
+      return data;
     }
-    return { projects: [], tags: [], settings: {} };
+
+    // Auto-roll stale tasks forward to today (mirrors Electron renderer behavior)
+    const rolled = autoRollTasks(data);
+    if (rolled > 0) {
+      console.error(`Auto-rolled ${rolled} stale task(s) forward to today`);
+    }
+
+    return data;
   }
 
   saveData(data: any): boolean {

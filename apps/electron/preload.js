@@ -7,59 +7,6 @@ contextBridge.exposeInMainWorld('api', {
   exportData: (data) => ipcRenderer.invoke('export-data', data),
   importData: () => ipcRenderer.invoke('import-data'),
 
-  // ── Auth APIs ──────────────────────────────────────────────
-  auth: {
-    logout: () => ipcRenderer.invoke('supabase-logout'),
-    getSession: () => ipcRenderer.invoke('supabase-get-session'),
-  },
-
-  // ── DataService APIs (granular Supabase CRUD) ──────────────
-  ds: {
-    loadData: () => ipcRenderer.invoke('ds:load-data'),
-    createTask: (taskData) => ipcRenderer.invoke('ds:create-task', taskData),
-    updateTask: (taskId, updates) => ipcRenderer.invoke('ds:update-task', taskId, updates),
-    deleteTask: (taskId) => ipcRenderer.invoke('ds:delete-task', taskId),
-    completeTask: (taskId) => ipcRenderer.invoke('ds:complete-task', taskId),
-    createProject: (projectData) => ipcRenderer.invoke('ds:create-project', projectData),
-    updateProject: (projectId, updates) => ipcRenderer.invoke('ds:update-project', projectId, updates),
-    deleteProject: (projectId) => ipcRenderer.invoke('ds:delete-project', projectId),
-    createSubtask: (parentTaskId, subtaskData) => ipcRenderer.invoke('ds:create-subtask', parentTaskId, subtaskData),
-    updateSubtask: (subtaskId, updates) => ipcRenderer.invoke('ds:update-subtask', subtaskId, updates),
-    deleteSubtask: (subtaskId) => ipcRenderer.invoke('ds:delete-subtask', subtaskId),
-    createTag: (tagData) => ipcRenderer.invoke('ds:create-tag', tagData),
-    updateTag: (tagId, updates) => ipcRenderer.invoke('ds:update-tag', tagId, updates),
-    deleteTag: (tagId) => ipcRenderer.invoke('ds:delete-tag', tagId),
-    createCategory: (catData) => ipcRenderer.invoke('ds:create-category', catData),
-    updateCategory: (catId, updates) => ipcRenderer.invoke('ds:update-category', catId, updates),
-    deleteCategory: (catId) => ipcRenderer.invoke('ds:delete-category', catId),
-    createNotebook: (notebookData) => ipcRenderer.invoke('ds:create-notebook', notebookData),
-    updateNotebook: (notebookId, updates) => ipcRenderer.invoke('ds:update-notebook', notebookId, updates),
-    deleteNotebook: (notebookId) => ipcRenderer.invoke('ds:delete-notebook', notebookId),
-    addRecapEntry: (entryData) => ipcRenderer.invoke('ds:add-recap-entry', entryData),
-    saveRecap: (recapData) => ipcRenderer.invoke('ds:save-recap', recapData),
-    updateWorkingOn: (taskIds) => ipcRenderer.invoke('ds:update-working-on', taskIds),
-    updatePreferences: (updates) => ipcRenderer.invoke('ds:update-preferences', updates),
-    // Team & Invitations
-    getTeamMembers: () => ipcRenderer.invoke('ds:get-team-members'),
-    inviteMember: (email, role) => ipcRenderer.invoke('ds:invite-member', email, role),
-    getInvitations: () => ipcRenderer.invoke('ds:get-invitations'),
-    getMyInvitations: () => ipcRenderer.invoke('ds:get-my-invitations'),
-    acceptInvitation: (id) => ipcRenderer.invoke('ds:accept-invitation', id),
-    declineInvitation: (id) => ipcRenderer.invoke('ds:decline-invitation', id),
-    createInviteCode: (role, projectId) => ipcRenderer.invoke('ds:create-invite-code', role, projectId),
-    acceptInviteCode: (code) => ipcRenderer.invoke('ds:accept-invite-code', code),
-    // Project Members
-    getProjectMembers: (projectId) => ipcRenderer.invoke('ds:get-project-members', projectId),
-    addProjectMember: (projectId, userId, role) => ipcRenderer.invoke('ds:add-project-member', projectId, userId, role),
-    updateProjectMemberRole: (projectId, userId, role) => ipcRenderer.invoke('ds:update-project-member-role', projectId, userId, role),
-    removeProjectMember: (projectId, userId) => ipcRenderer.invoke('ds:remove-project-member', projectId, userId),
-  },
-
-  // ── Realtime sync ────────────────────────────────────────
-  onRealtimeChange: (callback) => {
-    ipcRenderer.on('realtime-change', (event, data) => callback(data));
-  },
-
   // ── Focus Pill APIs ────────────────────────────────────────
   showPill: () => ipcRenderer.invoke('show-pill'),
   hidePill: () => ipcRenderer.invoke('hide-pill'),
