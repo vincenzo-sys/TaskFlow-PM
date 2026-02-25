@@ -21,6 +21,27 @@ async function getSupabaseClient() {
   return supabaseClient;
 }
 
+/**
+ * Write session to supabase-auth.json so the MCP server can authenticate.
+ */
+async function exportSessionFile() {
+  try {
+    const sbClient = await getSupabaseClient();
+    const client = await sbClient.getClient();
+    const { data: { session } } = await client.auth.getSession();
+    if (!session) return;
+
+    const sessionPath = path.join(app.getPath('userData'), 'supabase-auth.json');
+    const key = `sb-xteoofowswtvtxgroxog-auth-token`;
+    const payload = {};
+    payload[key] = JSON.stringify(session);
+    fs.writeFileSync(sessionPath, JSON.stringify(payload, null, 2));
+    console.log('Session file exported for MCP server at', sessionPath);
+  } catch (err) {
+    console.error('Failed to export session file:', err.message);
+  }
+}
+
 async function getDataService() {
   if (!dataService) dataService = require('./data-service');
   return dataService;
@@ -95,6 +116,8 @@ async function startApp() {
 
     if (session) {
       console.log('Existing session found, opening main window');
+      // Ensure session file exists for MCP server
+      await exportSessionFile();
       const ds = await getDataService();
       await ds.init();
       createWindow();
@@ -359,6 +382,7 @@ ipcMain.handle('supabase-login', async (event, email, password) => {
     console.log('[Auth] Attempting sign in for:', email);
     const sbClient = await getSupabaseClient();
     await sbClient.signIn(email, password);
+    await exportSessionFile();
     console.log('[Auth] Sign in successful, calling onAuthSuccess...');
     await onAuthSuccess();
     console.log('[Auth] onAuthSuccess complete');
