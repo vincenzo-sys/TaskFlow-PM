@@ -15,7 +15,7 @@ export function registerAnalyticsTools(server: McpServer, store: DataStore): voi
       endDate: z.string().optional().describe('End date YYYY-MM-DD (default: today)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = new Date();
       const endDate = args.endDate || today.toISOString().split('T')[0];
       const startDate = args.startDate || new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -128,7 +128,7 @@ export function registerAnalyticsTools(server: McpServer, store: DataStore): voi
       period: z.enum(['week', 'month', 'quarter']).optional().describe('Analysis period (default: week)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const period = args.period || 'week';
       const today = new Date();
 
@@ -264,7 +264,7 @@ export function registerAnalyticsTools(server: McpServer, store: DataStore): voi
       days: z.number().optional().describe('Number of days to look back (default: 14)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const lookbackDays = args.days || 14;
       const today = new Date();
       const startDate = new Date(today.getTime() - lookbackDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];

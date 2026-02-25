@@ -1,6 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { DataStore } from './data/store.js';
 import { LocalDataStore } from './data/local-store.js';
+import { SupabaseDataStore } from './data/supabase-store.js';
 import { getAllTasks, formatTaskForDisplay } from './helpers.js';
 
 // Tool registrations
@@ -23,12 +25,26 @@ const server = new McpServer({
   version: '1.0.0',
 });
 
-const store = new LocalDataStore();
+// ── Initialize data store (Supabase-first, local fallback) ───────────
+
+let store: DataStore;
+
+async function initStore(): Promise<DataStore> {
+  try {
+    const supaStore = new SupabaseDataStore();
+    await supaStore.init();
+    console.error('Using Supabase data store');
+    return supaStore;
+  } catch (err: any) {
+    console.error('Supabase unavailable, using local store:', err.message);
+    return new LocalDataStore();
+  }
+}
 
 // ── Resources ─────────────────────────────────────────────────────────
 
 server.resource('all-tasks', 'taskflow://tasks', async (uri) => {
-  const data = store.loadData();
+  const data = await store.loadData();
   const tasks = getAllTasks(data);
 
   let content = '# TaskFlow Tasks\n\n';
@@ -55,7 +71,7 @@ server.resource('all-tasks', 'taskflow://tasks', async (uri) => {
 });
 
 server.resource('task-summary', 'taskflow://summary', async (uri) => {
-  const data = store.loadData();
+  const data = await store.loadData();
   const tasks = getAllTasks(data);
   const today = new Date().toISOString().split('T')[0];
 
@@ -87,23 +103,28 @@ server.resource('task-summary', 'taskflow://summary', async (uri) => {
 
 // ── Tool Registration ─────────────────────────────────────────────────
 
-registerCoreCrudTools(server, store);
-registerViewTools(server, store);
-registerSchedulingTools(server, store);
-registerProjectMgmtTools(server, store);
-registerPlanningTools(server, store);
-registerExecutionTools(server, store);
-registerTimeGoalsTools(server, store);
-registerUtilitiesTools(server, store);
-registerAiProcessingTools(server, store);
-registerRecapTools(server, store);
-registerAnalyticsTools(server, store);
-registerNotebookTools(server, store);
-registerClaudeIntegrationTools(server, store);
+function registerAllTools(s: McpServer, st: DataStore): void {
+  registerCoreCrudTools(s, st);
+  registerViewTools(s, st);
+  registerSchedulingTools(s, st);
+  registerProjectMgmtTools(s, st);
+  registerPlanningTools(s, st);
+  registerExecutionTools(s, st);
+  registerTimeGoalsTools(s, st);
+  registerUtilitiesTools(s, st);
+  registerAiProcessingTools(s, st);
+  registerRecapTools(s, st);
+  registerAnalyticsTools(s, st);
+  registerNotebookTools(s, st);
+  registerClaudeIntegrationTools(s, st);
+}
 
 // ── Start Server ──────────────────────────────────────────────────────
 
 async function main() {
+  store = await initStore();
+  registerAllTools(server, store);
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('TaskFlow MCP Server running');

@@ -12,7 +12,7 @@ export function registerPlanningTools(server: McpServer, store: DataStore): void
     'Generate a prioritized day plan with overdue tasks, due today, high priority, and in-progress items. Shows scheduled time blocks with start/end times.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = todayDate();
       const tasks = getAllTasks(data).filter((t: any) => t.status !== 'done');
 
@@ -153,7 +153,7 @@ export function registerPlanningTools(server: McpServer, store: DataStore): void
       date: z.string().optional().describe('Target date YYYY-MM-DD (default: today)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const targetDate = args.date || todayDate();
       const tasks = getAllTasks(data);
       const yesterday = new Date(targetDate);
@@ -237,7 +237,7 @@ export function registerPlanningTools(server: McpServer, store: DataStore): void
       projectId: z.string().optional().describe('Filter to a specific project'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const tasks = getAllTasks(data);
       let projectTasks = tasks;
 
@@ -336,7 +336,7 @@ export function registerPlanningTools(server: McpServer, store: DataStore): void
         return errorResult('A task cannot block itself');
       }
 
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const taskResult = findTask(data, args.taskId);
       const blockerResult = findTask(data, args.blockedByTaskId);
@@ -380,7 +380,7 @@ export function registerPlanningTools(server: McpServer, store: DataStore): void
       // Add the dependency
       task.blockedBy.push(args.blockedByTaskId);
       blocker.blocks.push(args.taskId);
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(
         `Dependency created!\n\n"${task.name}" is now blocked by "${blocker.name}"\n\nThe blocked task cannot start until the blocker is completed.`
@@ -397,7 +397,7 @@ export function registerPlanningTools(server: McpServer, store: DataStore): void
       blockedByTaskId: z.string().describe('ID of the blocker task to remove'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const taskResult = findTask(data, args.taskId);
       const blockerResult = findTask(data, args.blockedByTaskId);
@@ -418,7 +418,7 @@ export function registerPlanningTools(server: McpServer, store: DataStore): void
         blockerResult.task.blocks = blockerResult.task.blocks.filter((id: string) => id !== args.taskId);
       }
 
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(
         `Dependency removed! "${task.name}" is no longer blocked by "${blockerResult?.task.name || args.blockedByTaskId}"`
@@ -435,7 +435,7 @@ export function registerPlanningTools(server: McpServer, store: DataStore): void
       includeCompleted: z.boolean().optional().describe('Include completed tasks (default: false)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const tasks = getAllTasks(data);
       let projectTasks = tasks;
 

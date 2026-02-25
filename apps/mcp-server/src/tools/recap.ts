@@ -14,7 +14,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
       date: z.string().optional().describe('Date to recap YYYY-MM-DD (default: today)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const targetDate = args.date || todayDate();
       const allTasks = getAllTasks(data);
 
@@ -103,7 +103,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
     'Generate a weekly review: summary, accomplishments, time by project, learnings, and items needing attention.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = new Date();
       const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
       const startDate = weekAgo.toISOString().split('T')[0];
@@ -249,7 +249,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
       tags: z.array(z.string()).optional().describe('Tags for categorization'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       if (!data.recapLog) data.recapLog = [];
 
@@ -264,7 +264,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
       };
 
       data.recapLog.push(entry);
-      store.saveData(data);
+      await store.saveData(data);
 
       const emoji: Record<string, string> = {
         accomplishment: '\u2713',
@@ -286,7 +286,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
       type: z.enum(['accomplishment', 'decision', 'note', 'all']).optional().describe('Filter by type (default: all)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const recapLog = data.recapLog || [];
 
       let entries = [...recapLog];
@@ -357,7 +357,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
       highlights: z.array(z.string()).optional().describe('Key highlights to feature'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const refDate = new Date(args.date || todayDate());
       const allTasks = getAllTasks(data);
       const recapLog = data.recapLog || [];
@@ -518,7 +518,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
       };
 
       data.savedRecaps.push(recap);
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Saved ${args.period} recap: "${periodLabel}"\nID: ${recap.id}\n\n${content}`);
     }
@@ -533,7 +533,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
       limit: z.number().optional().describe('Max results (default: 10)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const savedRecaps = data.savedRecaps || [];
       const limit = args.limit || 10;
 
@@ -576,7 +576,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
       recapId: z.string().describe('Recap ID'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const savedRecaps = data.savedRecaps || [];
 
       const recap = savedRecaps.find((r: any) => r.id === args.recapId);
@@ -596,7 +596,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
       entryId: z.string().describe('Recap entry ID to delete'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       if (!data.recapLog) data.recapLog = [];
 
@@ -607,7 +607,7 @@ export function registerRecapTools(server: McpServer, store: DataStore): void {
 
       const entry = data.recapLog[index];
       data.recapLog.splice(index, 1);
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Deleted ${entry.type} entry: "${entry.content}"`);
     }

@@ -20,7 +20,7 @@ export function registerViewTools(server: McpServer, store: DataStore): void {
     'Get all tasks scheduled or due today that are not yet done.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = todayDate();
       const tasks = getAllTasks(data).filter(
         (t: any) =>
@@ -53,7 +53,7 @@ export function registerViewTools(server: McpServer, store: DataStore): void {
     'Get all tasks with a due date before today that are not done. Sorted by due date ascending.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = todayDate();
       const tasks = getAllTasks(data).filter(
         (t: any) => t.status !== 'done' && t.dueDate && t.dueDate < today
@@ -84,7 +84,7 @@ export function registerViewTools(server: McpServer, store: DataStore): void {
       days: z.number().optional().describe('Number of days to look ahead. Default: 7'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = todayDate();
       const lookAhead = args.days ?? 7;
       const endDate = formatDate(new Date(Date.now() + lookAhead * 86400000));
@@ -120,7 +120,7 @@ export function registerViewTools(server: McpServer, store: DataStore): void {
     'Get all projects with task counts and metadata.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const projects = data.projects.map((p: any) => {
         const activeTasks = p.tasks.filter((t: any) => t.status !== 'done').length;
@@ -145,7 +145,7 @@ export function registerViewTools(server: McpServer, store: DataStore): void {
     'Get the single most important task to focus on right now, scored by urgency, due date, priority, and status.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = todayDate();
       const tasks = getAllTasks(data).filter((t: any) => t.status !== 'done');
 
@@ -198,7 +198,7 @@ export function registerViewTools(server: McpServer, store: DataStore): void {
     'Get all active tasks in the Inbox project, with context preview for brain dumps.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const inbox = data.projects.find((p: any) => p.isInbox || p.id === 'inbox');
 
       if (!inbox) {
@@ -232,7 +232,7 @@ export function registerViewTools(server: McpServer, store: DataStore): void {
     'Get full details of the task(s) currently being worked on (the active/focus tasks).',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       // Support both array (new) and single ID (legacy) formats
       let taskIds: string[] = [];
@@ -296,7 +296,7 @@ export function registerViewTools(server: McpServer, store: DataStore): void {
       limit: z.number().optional().describe('Maximum number of tasks to return'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = todayDate();
 
       if (args.highPriorityOnly) {
@@ -388,7 +388,7 @@ export function registerViewTools(server: McpServer, store: DataStore): void {
       endDate: z.string().optional().describe('End date (YYYY-MM-DD). Default: last day of current month.'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const now = new Date();
 
       // Default to current month
@@ -489,7 +489,7 @@ export function registerViewTools(server: McpServer, store: DataStore): void {
       taskId: z.string().describe('ID of the task to get context for'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
 
       if (!result) {

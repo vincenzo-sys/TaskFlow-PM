@@ -14,7 +14,7 @@ export function registerNotebookTools(server: McpServer, store: DataStore): void
       projectId: z.string().describe('Project ID'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const project = data.projects.find((p: any) => p.id === args.projectId);
       if (!project) {
@@ -63,7 +63,7 @@ export function registerNotebookTools(server: McpServer, store: DataStore): void
       notebookId: z.string().describe('Notebook ID'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const project = data.projects.find((p: any) => p.id === args.projectId);
       if (!project) {
@@ -100,7 +100,7 @@ export function registerNotebookTools(server: McpServer, store: DataStore): void
       icon: z.string().optional().describe('Emoji icon for the notebook'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const project = data.projects.find((p: any) => p.id === args.projectId);
       if (!project) {
@@ -121,7 +121,7 @@ export function registerNotebookTools(server: McpServer, store: DataStore): void
       };
 
       project.notebooks.push(notebook);
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Created notebook "${notebook.title}" in "${project.name}"\nID: ${notebook.id}`);
     }
@@ -140,7 +140,7 @@ export function registerNotebookTools(server: McpServer, store: DataStore): void
       pinned: z.boolean().optional().describe('Pin or unpin the notebook'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const project = data.projects.find((p: any) => p.id === args.projectId);
       if (!project) {
@@ -173,7 +173,7 @@ export function registerNotebookTools(server: McpServer, store: DataStore): void
       }
 
       notebook.updatedAt = new Date().toISOString();
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Updated notebook "${notebook.title}" (${changes.join(', ')})`);
     }
@@ -188,7 +188,7 @@ export function registerNotebookTools(server: McpServer, store: DataStore): void
       notebookId: z.string().describe('Notebook ID'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const project = data.projects.find((p: any) => p.id === args.projectId);
       if (!project) {
@@ -203,7 +203,7 @@ export function registerNotebookTools(server: McpServer, store: DataStore): void
 
       const title = notebooks[index].title;
       notebooks.splice(index, 1);
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Deleted notebook "${title}" from "${project.name}"`);
     }
@@ -220,7 +220,7 @@ export function registerNotebookTools(server: McpServer, store: DataStore): void
       separator: z.string().optional().describe('Separator between existing and new content (default: \\n\\n---\\n\\n)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const project = data.projects.find((p: any) => p.id === args.projectId);
       if (!project) {
@@ -242,7 +242,7 @@ export function registerNotebookTools(server: McpServer, store: DataStore): void
       }
 
       notebook.updatedAt = new Date().toISOString();
-      store.saveData(data);
+      await store.saveData(data);
 
       const previewLength = Math.min(args.content.length, 80);
       const preview = args.content.substring(0, previewLength) + (args.content.length > 80 ? '...' : '');

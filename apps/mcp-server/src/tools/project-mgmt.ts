@@ -16,7 +16,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
       color: z.string().optional().describe('Hex color for the project (default: #6366f1)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const existing = data.projects.find(
         (p: any) => p.name.toLowerCase() === args.name.toLowerCase()
@@ -35,7 +35,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
       };
 
       data.projects.push(project);
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Created project: "${project.name}"`);
     }
@@ -54,7 +54,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
         return errorResult('projectId or projectName is required');
       }
 
-      const data = store.loadData();
+      const data = await store.loadData();
       let projectIndex = -1;
 
       if (args.projectId) {
@@ -79,7 +79,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
       const projectName = project.name;
 
       data.projects.splice(projectIndex, 1);
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Deleted project "${projectName}" and ${taskCount} tasks`);
     }
@@ -94,7 +94,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
       projectId: z.string().describe('ID of the target project'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const moveResult = findTask(data, args.taskId);
       if (!moveResult) {
@@ -117,7 +117,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
 
       // Add to target project
       targetProject.tasks.push(movedTask);
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Moved "${movedTask.name}" from "${sourceProject.name}" to "${targetProject.name}"`);
     }
@@ -132,7 +132,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
       color: z.string().optional().describe('Hex color for the category (default: #6366f1)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       // Initialize categories if missing
       if (!data.categories) {
@@ -149,7 +149,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
       };
 
       data.categories.push(category);
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Category created!\n\nName: ${category.name}\nColor: ${category.color}\nID: ${category.id}`);
     }
@@ -161,7 +161,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
     'Get all project categories with task counts.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       // Initialize categories if missing
       if (!data.categories) {
@@ -170,7 +170,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
           { id: 'cat-personal', name: 'Personal', color: '#10b981', order: 1, collapsed: false },
           { id: 'cat-side', name: 'Side Projects', color: '#f59e0b', order: 2, collapsed: false },
         ];
-        store.saveData(data);
+        await store.saveData(data);
       }
 
       const categories = data.categories.map((cat: any) => {
@@ -224,7 +224,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
       color: z.string().optional().describe('Hex color (defaults to parent color)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const parent = data.projects.find((p: any) => p.id === args.parentProjectId);
       if (!parent) {
@@ -243,7 +243,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
       };
 
       data.projects.push(subproject);
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Created sub-project "${args.name}" under "${parent.name}"\nID: ${subproject.id}`);
     }
@@ -255,7 +255,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
     'Get the full project hierarchy as a tree with progress stats.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const projects = data.projects.filter((p: any) => !p.isInbox);
 
       // Build tree structure
@@ -313,7 +313,7 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
       endDate: z.string().optional().describe('End date YYYY-MM-DD (default: today)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = new Date();
       const startDate = args.startDate || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const endDate = args.endDate || today.toISOString().split('T')[0];

@@ -15,7 +15,7 @@ export function registerExecutionTools(server: McpServer, store: DataStore): voi
       executionType: z.enum(['ai', 'manual', 'hybrid']).describe('Execution type: ai, manual, or hybrid'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const result = findTask(data, args.taskId);
       if (!result) {
@@ -24,7 +24,7 @@ export function registerExecutionTools(server: McpServer, store: DataStore): voi
 
       const { task } = result;
       task.executionType = args.executionType;
-      store.saveData(data);
+      await store.saveData(data);
 
       const typeLabels: Record<string, string> = {
         ai: 'AI (Claude can do autonomously)',
@@ -44,7 +44,7 @@ export function registerExecutionTools(server: McpServer, store: DataStore): voi
       date: z.string().optional().describe('Target date YYYY-MM-DD (default: today)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const targetDate = args.date || todayDate();
       const tasks = getAllTasks(data).filter((t: any) =>
         t.status !== 'done' &&
@@ -124,7 +124,7 @@ export function registerExecutionTools(server: McpServer, store: DataStore): voi
       assignTo: z.enum(['claude', 'user', 'none']).describe('Who to assign to: claude, user, or none'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const result = findTask(data, args.taskId);
       if (!result) {
@@ -135,7 +135,7 @@ export function registerExecutionTools(server: McpServer, store: DataStore): voi
       const assignValue = args.assignTo === 'none' ? null : args.assignTo;
       task.assignedTo = assignValue;
 
-      store.saveData(data);
+      await store.saveData(data);
 
       const taskType = parentTask ? 'Subtask' : 'Task';
       const assignedLabel = assignValue ? `to ${assignValue}` : '(unassigned)';
@@ -151,7 +151,7 @@ export function registerExecutionTools(server: McpServer, store: DataStore): voi
       todayOnly: z.boolean().optional().describe('Only show tasks scheduled/due today (default: false)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const todayOnly = args.todayOnly || false;
       const today = todayDate();
       const claudeTasks: any[] = [];
@@ -294,7 +294,7 @@ export function registerExecutionTools(server: McpServer, store: DataStore): voi
       blockedBy: z.string().optional().describe('What or who is blocking this task'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       const result = findTask(data, args.taskId);
       if (!result) {
@@ -312,7 +312,7 @@ export function registerExecutionTools(server: McpServer, store: DataStore): voi
         task.status = 'waiting';
       }
 
-      store.saveData(data);
+      await store.saveData(data);
 
       let output = `Updated "${task.name}":\n`;
       output += `- Status: waiting\n`;

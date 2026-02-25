@@ -15,7 +15,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
       context: z.string().describe('The context text to append'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -28,7 +28,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
         : args.context;
 
       task.context = newContext;
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Added context to "${task.name}"`);
     }
@@ -42,7 +42,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
       projectName: z.string().optional().describe('Filter to a specific project name. If omitted, deletes from all projects.'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       let deletedCount = 0;
       const projectFilter = args.projectName?.toLowerCase();
 
@@ -65,7 +65,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
         }
       }
 
-      store.saveData(data);
+      await store.saveData(data);
 
       const scopeMsg = projectFilter ? ` from "${args.projectName}"` : '';
       return textResult(`Deleted ${deletedCount} completed tasks${scopeMsg}`);
@@ -85,7 +85,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
       contactInfo: z.string().optional().describe('Contact info for the person/entity related to the blocker'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -103,7 +103,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
         notes: [],
       };
 
-      store.saveData(data);
+      await store.saveData(data);
 
       let output = `## Blocker Set\n\n`;
       output += `**Task:** ${task.name}\n`;
@@ -125,7 +125,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
       includeResolved: z.boolean().optional().describe('Include tasks with resolved blockers. Default: false.'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const tasks = getAllTasks(data);
       let blocked = tasks.filter((t: any) =>
         t.status === 'waiting' || t.blockerInfo?.type
@@ -189,7 +189,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
       resolution: z.string().optional().describe('Description of how the blocker was resolved'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -209,7 +209,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
         }
       }
 
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Blocker cleared for "${task.name}". Task is now ready.`);
     }
@@ -225,7 +225,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
       newFollowUpDate: z.string().optional().describe('New follow-up date (YYYY-MM-DD)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -248,7 +248,7 @@ export function registerUtilitiesTools(server: McpServer, store: DataStore): voi
         task.blockerInfo.followUpDate = args.newFollowUpDate;
       }
 
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Follow-up logged for "${task.name}": ${args.note}`);
     }

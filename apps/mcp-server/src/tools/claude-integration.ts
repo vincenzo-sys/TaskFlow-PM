@@ -15,7 +15,7 @@ export function registerClaudeIntegrationTools(server: McpServer, store: DataSto
       todayOnly: z.boolean().optional().describe('Only include tasks scheduled/due today (default: false)'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const todayOnly = args.todayOnly || false;
       const today = todayDate();
       const now = new Date().toISOString();

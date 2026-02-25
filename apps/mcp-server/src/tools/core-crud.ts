@@ -15,7 +15,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
       project: z.string().optional().describe('Filter by project name'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       let tasks = getAllTasks(data);
 
       if (args.status && args.status !== 'all') {
@@ -67,7 +67,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
       assignee: z.string().optional().describe('Team member name to assign this task to'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
 
       // Find or create project
       let project: any = null;
@@ -138,7 +138,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
       }
 
       project.tasks.push(task);
-      store.saveData(data);
+      await store.saveData(data);
 
       let response = `Created task: "${task.name}"\nID: ${task.id}\nProject: ${project.name}`;
       if (task.scheduledTime) {
@@ -161,7 +161,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
       subtasks: z.array(z.string()).describe('List of subtask names to create'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -183,7 +183,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
         created.push(subtaskName);
       }
 
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(
         `Added ${created.length} subtasks to "${task.name}":\n${created.map((s) => `- ${s}`).join('\n')}`
@@ -205,7 +205,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
       })).describe('Subtasks to create with optional time estimates and scheduling'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -236,7 +236,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
         });
       }
 
-      store.saveData(data);
+      await store.saveData(data);
 
       let output = `## Created ${created.length} Subtasks for "${task.name}"\n\n`;
       created.forEach((st) => {
@@ -258,7 +258,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
       taskId: z.string().describe('ID of the task to complete'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -266,7 +266,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
 
       result.task.status = 'done';
       result.task.completedAt = new Date().toISOString();
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Completed: "${result.task.name}"`);
     }
@@ -294,7 +294,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
       assignee: z.string().nullable().optional().describe('Team member name or null to clear'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -327,7 +327,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
       if (args.assignee !== undefined) { task.assignee = args.assignee || null; changes.push('assignee -> ' + (args.assignee || 'unassigned')); }
 
       task.updatedAt = new Date().toISOString();
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Updated task: "${task.name}" (${changes.join(', ')})`);
     }
@@ -341,7 +341,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
       taskId: z.string().describe('ID of the task to delete'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -358,7 +358,7 @@ export function registerCoreCrudTools(server: McpServer, store: DataStore): void
         project.tasks = project.tasks.filter((t: any) => t.id !== args.taskId);
       }
 
-      store.saveData(data);
+      await store.saveData(data);
       return textResult(`Deleted task: "${taskName}"`);
     }
   );

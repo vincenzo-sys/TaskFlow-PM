@@ -14,7 +14,7 @@ export function registerAiProcessingTools(server: McpServer, store: DataStore): 
       taskId: z.string().describe('ID of the task to analyze'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -133,7 +133,7 @@ export function registerAiProcessingTools(server: McpServer, store: DataStore): 
       taskId: z.string().describe('ID of the task to suggest subtasks for'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -231,7 +231,7 @@ export function registerAiProcessingTools(server: McpServer, store: DataStore): 
       taskId: z.string().describe('ID of the task to analyze'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -312,7 +312,7 @@ export function registerAiProcessingTools(server: McpServer, store: DataStore): 
     'Analyze all active tasks and suggest the best next task to work on based on scheduling, due dates, priority, and status.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = todayDate();
       const tasks = getAllTasks(data).filter((t: any) =>
         t.status !== 'done' && t.status !== 'waiting'
@@ -433,7 +433,7 @@ export function registerAiProcessingTools(server: McpServer, store: DataStore): 
       date: z.string().optional().describe('Date to analyze (YYYY-MM-DD). Defaults to today.'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const targetDate = args.date || todayDate();
       const tasks = getAllTasks(data).filter((t: any) =>
         t.status !== 'done' && t.status !== 'waiting'
@@ -516,7 +516,7 @@ export function registerAiProcessingTools(server: McpServer, store: DataStore): 
       taskIds: z.array(z.string()).optional().describe('Specific task IDs to schedule. If omitted, uses top priority unscheduled tasks.'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const targetDate = args.date || todayDate();
       const startHour = args.startHour ?? 9;
       const endHour = args.endHour ?? 18;
@@ -605,7 +605,7 @@ export function registerAiProcessingTools(server: McpServer, store: DataStore): 
       projectName: z.string().optional().describe('Name of the project to analyze'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       let project = null;
 
       if (args.projectId) {
@@ -690,7 +690,7 @@ export function registerAiProcessingTools(server: McpServer, store: DataStore): 
     'Analyze and rank all unprocessed inbox items by urgency, importance, due dates, context richness, and age.',
     {},
     async () => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const inbox = data.projects.find((p: any) => p.isInbox || p.id === 'inbox');
       if (!inbox || inbox.tasks.length === 0) {
         return textResult('Inbox is empty! No items to prioritize.');

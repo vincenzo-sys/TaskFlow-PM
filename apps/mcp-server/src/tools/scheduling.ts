@@ -33,7 +33,7 @@ export function registerSchedulingTools(server: McpServer, store: DataStore): vo
         );
       }
 
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -56,7 +56,7 @@ export function registerSchedulingTools(server: McpServer, store: DataStore): vo
       }
 
       task.updatedAt = new Date().toISOString();
-      store.saveData(data);
+      await store.saveData(data);
 
       let response = `Scheduled "${task.name}" at ${args.scheduledTime} on ${date}`;
       if (args.estimatedMinutes) {
@@ -76,7 +76,7 @@ export function registerSchedulingTools(server: McpServer, store: DataStore): vo
       date: z.string().optional().describe('Date to check (YYYY-MM-DD). Defaults to today.'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const date = args.date || todayDate();
 
       const tasks = getAllTasks(data).filter(
@@ -126,7 +126,7 @@ export function registerSchedulingTools(server: McpServer, store: DataStore): vo
       taskId: z.string().describe('ID of the task to unschedule'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -140,7 +140,7 @@ export function registerSchedulingTools(server: McpServer, store: DataStore): vo
       delete task.scheduledDate;
       task.updatedAt = new Date().toISOString();
 
-      store.saveData(data);
+      await store.saveData(data);
 
       let response = `Cleared schedule for "${task.name}"`;
       if (prevTime && prevDate) {
@@ -165,7 +165,7 @@ export function registerSchedulingTools(server: McpServer, store: DataStore): vo
       ).describe('Array of tasks to schedule with their times'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const today = todayDate();
 
       const results: string[] = [];
@@ -207,7 +207,7 @@ export function registerSchedulingTools(server: McpServer, store: DataStore): vo
         results.push(line);
       }
 
-      store.saveData(data);
+      await store.saveData(data);
 
       let output = `## Bulk Schedule for ${today}\n\n`;
 

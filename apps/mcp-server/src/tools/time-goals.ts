@@ -16,7 +16,7 @@ export function registerTimeGoalsTools(server: McpServer, store: DataStore): voi
       notes: z.string().optional().describe('Optional notes about what was done during this time'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -33,7 +33,7 @@ export function registerTimeGoalsTools(server: McpServer, store: DataStore): voi
       };
 
       task.timeLog.push(entry);
-      store.saveData(data);
+      await store.saveData(data);
 
       const totalMinutes = task.timeLog.reduce((sum: number, e: any) => sum + e.minutes, 0);
       const hours = Math.floor(totalMinutes / 60);
@@ -52,14 +52,14 @@ export function registerTimeGoalsTools(server: McpServer, store: DataStore): voi
       goal: z.string().describe('The goal or success criteria for this task'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
       }
 
       result.task.goal = args.goal;
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Set goal for "${result.task.name}":\n"${args.goal}"`);
     }
@@ -74,7 +74,7 @@ export function registerTimeGoalsTools(server: McpServer, store: DataStore): voi
       learning: z.string().describe('The learning or insight to record'),
     },
     async (args) => {
-      const data = store.loadData();
+      const data = await store.loadData();
       const result = findTask(data, args.taskId);
       if (!result) {
         return errorResult(`Task ${args.taskId} not found`);
@@ -89,7 +89,7 @@ export function registerTimeGoalsTools(server: McpServer, store: DataStore): voi
         addedAt: new Date().toISOString(),
       });
 
-      store.saveData(data);
+      await store.saveData(data);
 
       return textResult(`Added learning to "${task.name}":\n"${args.learning}"`);
     }
