@@ -59,7 +59,20 @@ export const EventsMixin = {
       this.updateFontSizeDisplay();
       this.renderTeamMembersList();
       this.renderPendingInvitations();
+      // Show account email
+      const emailEl = document.getElementById('account-email-display');
+      if (emailEl) {
+        const session = this.data.currentUserId ? `Signed in as user ${this.data.currentUserId.slice(0, 8)}...` : 'Not signed in';
+        emailEl.textContent = session;
+      }
       this.openModal('settings-modal');
+    });
+
+    // Logout button
+    document.getElementById('logout-btn')?.addEventListener('click', async () => {
+      if (confirm('Log out? The app will restart and show the login screen.')) {
+        await window.api.auth.logout();
+      }
     });
 
     // Team member invitation
