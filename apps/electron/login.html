@@ -238,7 +238,22 @@
         <button type="submit" class="submit-btn" id="signup-btn">Create Account</button>
       </form>
 
+      <div class="invite-code-section" id="invite-code-section" style="display:none;">
+        <div style="border-top:1px solid #e7e5e4;margin:20px 0 16px;"></div>
+        <h3 style="font-size:14px;font-weight:600;color:#1c1917;margin-bottom:8px;">Join a Team</h3>
+        <p style="font-size:12px;color:#78716c;margin-bottom:10px;">Enter the invite code you received.</p>
+        <div class="error-msg" id="invite-code-error"></div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="invite-code-input"
+                 placeholder="e.g. ABCD1234"
+                 maxlength="8"
+                 style="flex:1;padding:10px 12px;font-size:16px;font-family:'SF Mono','Fira Code',monospace;letter-spacing:3px;text-transform:uppercase;border:1.5px solid #d6d3d1;border-radius:8px;outline:none;background:#faf9f7;color:#1c1917;text-align:center;">
+          <button type="button" class="submit-btn" id="invite-code-submit-btn" style="width:auto;padding:10px 16px;margin-top:0;">Join</button>
+        </div>
+      </div>
+
       <div class="offline-link">
+        <a id="invite-code-toggle-btn" style="display:block;margin-bottom:8px;">Have an invite code?</a>
         <a id="offline-btn">Continue offline (local only)</a>
       </div>
     </div>
@@ -327,6 +342,61 @@
     // Offline mode
     document.getElementById('offline-btn').addEventListener('click', () => {
       window.authApi.continueOffline();
+    });
+
+    // Invite code toggle
+    document.getElementById('invite-code-toggle-btn').addEventListener('click', () => {
+      const section = document.getElementById('invite-code-section');
+      const toggleBtn = document.getElementById('invite-code-toggle-btn');
+      if (section.style.display === 'none') {
+        section.style.display = 'block';
+        toggleBtn.textContent = 'Hide invite code';
+        document.getElementById('invite-code-input').focus();
+      } else {
+        section.style.display = 'none';
+        toggleBtn.textContent = 'Have an invite code?';
+      }
+    });
+
+    // Invite code submit (requires login first)
+    document.getElementById('invite-code-submit-btn').addEventListener('click', async () => {
+      const input = document.getElementById('invite-code-input');
+      const code = input.value.trim().toUpperCase();
+      const errEl = document.getElementById('invite-code-error');
+      errEl.classList.remove('visible');
+
+      if (!code || code.length < 4) {
+        errEl.textContent = 'Please enter a valid invite code.';
+        errEl.classList.add('visible');
+        return;
+      }
+
+      try {
+        const result = await window.authApi.acceptInviteCode(code);
+        if (result && result.error) {
+          errEl.textContent = result.error;
+          errEl.classList.add('visible');
+          return;
+        }
+        // Success — the main process will handle reloading
+        input.value = '';
+        errEl.textContent = 'Team joined! Sign in to continue.';
+        errEl.style.color = '#16a34a';
+        errEl.style.background = '#f0fdf4';
+        errEl.style.borderColor = '#86efac';
+        errEl.classList.add('visible');
+      } catch (err) {
+        errEl.textContent = err.message || 'Invalid or expired code. Make sure you are signed in first.';
+        errEl.classList.add('visible');
+      }
+    });
+
+    // Allow Enter key on invite code input
+    document.getElementById('invite-code-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('invite-code-submit-btn').click();
+      }
     });
   </script>
 </body>

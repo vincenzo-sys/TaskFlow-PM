@@ -252,6 +252,61 @@ export const ModalsMixin = {
     }
   },
 
+  async generateInviteCode() {
+    const roleSelect = document.getElementById('invite-code-role-select');
+    const role = roleSelect ? roleSelect.value : 'member';
+    const display = document.getElementById('invite-code-display');
+
+    try {
+      const result = await window.api.ds.createInviteCode(role);
+      if (!result || !result.code) throw new Error('No code returned');
+
+      display.innerHTML = `
+        <span class="invite-code-value">${this.escapeHtml(result.code)}</span>
+        <span class="invite-code-meta">Expires in 7 days</span>
+        <button class="btn btn-secondary btn-small invite-code-copy" id="copy-invite-code-btn">Copy</button>
+      `;
+      display.classList.remove('hidden');
+
+      document.getElementById('copy-invite-code-btn')?.addEventListener('click', async () => {
+        await window.api.copyToClipboard(result.code);
+        this.showToast('Invite code copied to clipboard!');
+      });
+
+      this.renderPendingInvitations();
+    } catch (err) {
+      this.showToast('Failed to generate code: ' + (err.message || 'Unknown error'));
+    }
+  },
+
+  async joinTeamByCode() {
+    const input = document.getElementById('join-team-code-input');
+    if (!input) return;
+    const code = input.value.trim().toUpperCase();
+    if (!code || code.length < 4) {
+      this.showToast('Please enter a valid invite code');
+      return;
+    }
+
+    try {
+      const result = await window.api.ds.acceptInviteCode(code);
+      if (result && result.error) {
+        this.showToast(result.error);
+        return;
+      }
+      this.showToast('Team joined successfully! Reloading...');
+      input.value = '';
+      // Reload data to get new team context
+      this.data = await window.api.loadData();
+      this.currentUserId = this.data.currentUserId || null;
+      if (!this.data.teamMembers) this.data.teamMembers = [];
+      this.renderTeamMembersList();
+      this.render();
+    } catch (err) {
+      this.showToast('Failed to join: ' + (err.message || 'Invalid or expired code'));
+    }
+  },
+
   async inviteTeamMember() {
     const emailInput = document.getElementById('invite-email-input');
     const roleSelect = document.getElementById('invite-role-select');

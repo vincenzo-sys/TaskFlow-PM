@@ -709,6 +709,42 @@
   line-height: 1 !important;
 }
 
+/* Invite Code Display */
+.invite-code-display {
+  margin-top: 10px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1.5px solid #86efac;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.invite-code-display.hidden {
+  display: none;
+}
+
+.invite-code-value {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: #166534;
+  user-select: all;
+}
+
+.invite-code-meta {
+  flex: 1;
+  font-size: 11px;
+  color: #4ade80;
+}
+
+.invite-code-copy {
+  padding: 5px 10px !important;
+  font-size: 12px !important;
+}
+
 /* Invitation Banner (Today view) */
 .invitation-banner {
   display: flex;

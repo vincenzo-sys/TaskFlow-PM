@@ -769,6 +769,59 @@ async function declineInvitation(invitationId) {
   return data;
 }
 
+/**
+ * Create a shareable invite code for the current team.
+ * Generates a random 8-char alphanumeric code and inserts a code-based invitation.
+ */
+async function createInviteCode(role = 'member') {
+  const client = await supabaseClient.getClient();
+  if (!_teamId) await init();
+
+  // Generate a random 8-char code (uppercase alphanumeric, no ambiguous chars)
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
+  let code = '';
+  const bytes = require('crypto').randomBytes(8);
+  for (let i = 0; i < 8; i++) {
+    code += chars[bytes[i] % chars.length];
+  }
+
+  const { data, error } = await client
+    .from('team_invitations')
+    .insert({
+      team_id: _teamId,
+      invited_by: _userId,
+      email: null,
+      role,
+      invite_code: code,
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return { code, invitation: data };
+}
+
+/**
+ * Accept an invitation by its shareable code.
+ * Calls the Supabase RPC function accept_invitation_by_code().
+ */
+async function acceptInviteCode(code) {
+  const client = await supabaseClient.getClient();
+
+  const { data, error } = await client.rpc('accept_invitation_by_code', {
+    code: code.trim().toUpperCase(),
+  });
+  if (error) throw error;
+
+  // Refresh team context after accepting
+  if (data && data.team_id) {
+    _teamId = data.team_id;
+    _teamMembers = null; // bust cache
+  }
+
+  return data;
+}
+
 // ── Project Members ─────────────────────────────────────────
 
 async function getProjectMembers(projectId) {
@@ -891,6 +944,8 @@ module.exports = {
   getPendingInvitationsForMe,
   acceptInvitation,
   declineInvitation,
+  createInviteCode,
+  acceptInviteCode,
   // Project Members
   getProjectMembers,
   addProjectMember,

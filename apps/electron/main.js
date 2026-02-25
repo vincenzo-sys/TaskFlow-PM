@@ -620,6 +620,16 @@ ipcMain.handle('ds:decline-invitation', async (event, invitationId) => {
   return ds.declineInvitation(invitationId);
 });
 
+ipcMain.handle('ds:create-invite-code', async (event, role) => {
+  const ds = await getDataService();
+  return ds.createInviteCode(role);
+});
+
+ipcMain.handle('ds:accept-invite-code', async (event, code) => {
+  const ds = await getDataService();
+  return ds.acceptInviteCode(code);
+});
+
 // ── Project Members ──────────────────────────────────────────
 ipcMain.handle('ds:get-project-members', async (event, projectId) => {
   const ds = await getDataService();

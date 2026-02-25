@@ -68,6 +68,13 @@ export const EventsMixin = {
       if (e.key === 'Enter') { e.preventDefault(); this.inviteTeamMember(); }
     });
 
+    // Invite code generation & join team
+    document.getElementById('generate-invite-code-btn')?.addEventListener('click', () => this.generateInviteCode());
+    document.getElementById('join-team-btn')?.addEventListener('click', () => this.joinTeamByCode());
+    document.getElementById('join-team-code-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this.joinTeamByCode(); }
+    });
+
     // Modal close buttons
     document.querySelectorAll('.modal-close').forEach(btn => {
       btn.addEventListener('click', () => this.closeModal(btn.dataset.modal));
