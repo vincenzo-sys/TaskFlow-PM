@@ -136,6 +136,10 @@ async function onAuthSuccess() {
   try {
     const ds = await getDataService();
     startRealtime(ds);
+    // One-time backfill: add owner to existing projects with no members
+    ds.backfillProjectOwnership().catch(err =>
+      console.error('Backfill failed (non-blocking):', err.message)
+    );
   } catch (err) {
     console.error('[Auth] Realtime start failed:', err.message);
   }

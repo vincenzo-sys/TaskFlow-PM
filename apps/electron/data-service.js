@@ -900,6 +900,40 @@ async function removeProjectMember(projectId, userId) {
   if (error) throw error;
 }
 
+// ── One-time migration: backfill project_members for existing projects ──
+
+async function backfillProjectOwnership() {
+  const client = await supabaseClient.getClient();
+  if (!_teamId || !_userId) await init();
+
+  // Get all non-inbox projects for this team
+  const { data: projects } = await client
+    .from('projects')
+    .select('id, is_inbox')
+    .eq('team_id', _teamId);
+
+  let added = 0;
+  for (const p of (projects || [])) {
+    if (p.is_inbox) continue;
+
+    // Check if project already has any members
+    const { count } = await client
+      .from('project_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('project_id', p.id);
+
+    if (count === 0) {
+      const { error } = await client
+        .from('project_members')
+        .insert({ project_id: p.id, user_id: _userId, role: 'admin', added_by: _userId });
+      if (!error) added++;
+    }
+  }
+
+  console.log(`Backfill: added owner to ${added} existing projects`);
+  return { added };
+}
+
 // ── Helpers ─────────────────────────────────────────────────
 
 function isUUID(str) {
@@ -965,6 +999,8 @@ module.exports = {
   addProjectMember,
   updateProjectMemberRole,
   removeProjectMember,
+  // Migrations
+  backfillProjectOwnership,
   // Sync
   syncChanges,
 };
