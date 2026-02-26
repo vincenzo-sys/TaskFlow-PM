@@ -28,6 +28,9 @@ export const TodayViewMixin = {
       this.autoRollTasks();
     }
 
+    // Render project summary cards row
+    this.renderTodayProjectCards();
+
     // Render Working On Now section
     this.renderWorkingOnNow();
 
@@ -319,7 +322,13 @@ export const TodayViewMixin = {
     const today = this.getLocalDateString();
     container.innerHTML = tasks.map((task, index) => {
       const project = this.data.projects.find(p => p.tasks.some(t => t.id === task.id));
-      const projectName = project && !project.isInbox ? project.name : '';
+      // Build breadcrumb path: ancestors + project name
+      let projectBreadcrumb = '';
+      if (project && !project.isInbox) {
+        const ancestors = this.getProjectAncestors(project.id);
+        const pathParts = [...ancestors.map(a => this.escapeHtml(a.name)), this.escapeHtml(project.name)];
+        projectBreadcrumb = pathParts.join(' &rsaquo; ');
+      }
       const isOverdue = task.dueDate && task.dueDate < today;
       const duration = task.estimatedMinutes || 30;
       const subtaskCount = task.subtasks?.length || 0;
@@ -356,7 +365,7 @@ export const TodayViewMixin = {
           <div class="today-task-content">
             <div class="today-task-name">${this.escapeHtml(task.name)}${execBadge}</div>
             <div class="today-task-meta">
-              ${projectName ? `<span class="today-task-project">${this.escapeHtml(projectName)}</span>` : ''}
+              ${projectBreadcrumb ? `<span class="today-task-project">${projectBreadcrumb}</span>` : ''}
               ${isOverdue ? `<span class="today-task-overdue">Overdue</span>` : ''}
               <span class="today-task-duration">${duration}m</span>
               ${subtaskCount > 0 ? `<span class="today-task-subtasks">${subtasksDone}/${subtaskCount}</span>` : ''}
@@ -471,6 +480,37 @@ export const TodayViewMixin = {
       const today = this.getLocalDateString();
       dailyInput.value = this.data.dailyNotes?.[today] || '';
     }
+  },
+
+  renderTodayProjectCards() {
+    const container = document.getElementById('today-projects-row');
+    if (!container) return;
+
+    const topLevelProjects = this.data.projects.filter(p =>
+      !p.parentProjectId && !p.isInbox && p.status !== 'archived'
+    );
+
+    if (topLevelProjects.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    container.innerHTML = topLevelProjects.map(p => {
+      const allTasks = this.getProjectWithDescendantTasks(p.id);
+      const activeCount = allTasks.filter(t => t.status !== 'done').length;
+      return `<button class="today-project-card" data-project-id="${p.id}">
+        <span class="today-project-dot" style="background:${p.color}"></span>
+        <span class="today-project-name">${this.escapeHtml(p.name)}</span>
+        <span class="today-project-count">${activeCount}</span>
+      </button>`;
+    }).join('');
+
+    // Bind click handlers
+    container.querySelectorAll('.today-project-card').forEach(card => {
+      card.addEventListener('click', () => {
+        this.setView('project-' + card.dataset.projectId);
+      });
+    });
   },
 
   setupFocusReturnRefresh() {

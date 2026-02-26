@@ -261,6 +261,7 @@ export const DataOpsMixin = {
       goal: projectData.goal || '',
       color: projectData.color || '#6366f1',
       categoryId: projectData.categoryId || null,
+      parentProjectId: projectData.parentProjectId || null,
       status: projectData.status || 'active',
       workingDirectory: projectData.workingDirectory || null,
       tasks: [],
@@ -449,6 +450,13 @@ export const DataOpsMixin = {
   deleteProject(projectId) {
     const index = this.data.projects.findIndex(p => p.id === projectId);
     if (index !== -1 && !this.data.projects[index].isInbox) {
+      // Orphan child projects — move them to parent's parent (or top-level)
+      const deletedProject = this.data.projects[index];
+      for (const project of this.data.projects) {
+        if (project.parentProjectId === projectId) {
+          project.parentProjectId = deletedProject.parentProjectId || null;
+        }
+      }
       this.data.projects.splice(index, 1);
       this.saveData();
       if (this.currentView === `project-${projectId}`) {
@@ -457,6 +465,53 @@ export const DataOpsMixin = {
       return true;
     }
     return false;
+  },
+
+  // Subproject helpers
+  getChildProjects(projectId) {
+    return this.data.projects.filter(p => p.parentProjectId === projectId);
+  },
+
+  getProjectAncestors(projectId) {
+    const ancestors = [];
+    let current = this.data.projects.find(p => p.id === projectId);
+    while (current && current.parentProjectId) {
+      const parent = this.data.projects.find(p => p.id === current.parentProjectId);
+      if (!parent || ancestors.includes(parent)) break; // prevent cycles
+      ancestors.unshift(parent);
+      current = parent;
+    }
+    return ancestors;
+  },
+
+  getProjectDescendantIds(projectId) {
+    const ids = [];
+    const stack = [projectId];
+    while (stack.length > 0) {
+      const currentId = stack.pop();
+      const children = this.data.projects.filter(p => p.parentProjectId === currentId);
+      for (const child of children) {
+        if (!ids.includes(child.id)) {
+          ids.push(child.id);
+          stack.push(child.id);
+        }
+      }
+    }
+    return ids;
+  },
+
+  getProjectWithDescendantTasks(projectId) {
+    const project = this.data.projects.find(p => p.id === projectId);
+    if (!project) return [];
+    const descendantIds = this.getProjectDescendantIds(projectId);
+    let tasks = [...(project.tasks || [])];
+    for (const descId of descendantIds) {
+      const descProject = this.data.projects.find(p => p.id === descId);
+      if (descProject) {
+        tasks = tasks.concat(descProject.tasks || []);
+      }
+    }
+    return tasks;
   },
 
   // Tag CRUD

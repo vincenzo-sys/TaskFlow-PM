@@ -76,10 +76,13 @@ function migrateData(data) {
   if (data.projects) {
     for (const project of data.projects) {
       if (!project.isInbox) {
-        // Add categoryId if missing - default to Personal
-        if (!project.categoryId) {
-          project.categoryId = 'cat-personal';
-          needsSave = true;
+        // Add categoryId if missing - default to Personal (skip subprojects)
+        if (!project.categoryId && !project.parentProjectId) {
+          // Only assign default category if the category actually exists
+          if (data.categories && data.categories.some(c => c.id === 'cat-personal')) {
+            project.categoryId = 'cat-personal';
+            needsSave = true;
+          }
         }
         // Add status if missing - use open-ended statuses: active/paused/blocked
         if (!project.status || project.status === 'completed') {
@@ -176,6 +179,16 @@ function migrateData(data) {
       needsSave = true;
     }
   });
+
+  // Migration: Initialize parentProjectId on projects
+  if (data.projects) {
+    for (const project of data.projects) {
+      if (project.parentProjectId === undefined) {
+        project.parentProjectId = null;
+        needsSave = true;
+      }
+    }
+  }
 
   // Save if migrations occurred
   if (needsSave) {

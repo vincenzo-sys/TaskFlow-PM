@@ -36,105 +36,93 @@ export const SidebarMixin = {
     if (!container) return;
     container.innerHTML = '';
 
-    const categories = this.data.categories || [];
-    const projects = this.data.projects.filter(p => !p.isInbox);
+    if (!this._showArchivedProjects) this._showArchivedProjects = false;
 
-    // Sort categories by order
-    const sortedCategories = [...categories].sort((a, b) => (a.order || 0) - (b.order || 0));
+    // Render top-level projects directly — no category wrappers
+    const topLevel = this.data.projects.filter(p => !p.isInbox && !p.parentProjectId);
 
-    // Render each category
-    for (const category of sortedCategories) {
-      const categoryProjects = projects.filter(p => p.categoryId === category.id);
-      const totalTasks = categoryProjects.reduce((sum, p) =>
-        sum + p.tasks.filter(t => t.status !== 'done').length, 0);
+    // Filter out archived unless toggle is on
+    const visible = this._showArchivedProjects
+      ? topLevel
+      : topLevel.filter(p => p.status !== 'archived');
 
-      const group = document.createElement('div');
-      group.className = `category-group${category.collapsed ? ' collapsed' : ''}`;
-      group.dataset.categoryId = category.id;
-
-      group.innerHTML = `
-        <div class="category-header">
-          <span class="category-toggle">&#9660;</span>
-          <span class="category-color" style="background:${category.color}"></span>
-          <span class="category-name">${this.escapeHtml(category.name)}</span>
-          <span class="category-count">${totalTasks}</span>
-          <button class="category-edit" title="Edit">&#9998;</button>
-        </div>
-        <div class="category-projects" style="max-height: ${category.collapsed ? 0 : categoryProjects.length * 40 + 8}px"></div>
-      `;
-
-      // Toggle collapse on header click
-      group.querySelector('.category-header').addEventListener('click', (e) => {
-        if (!e.target.classList.contains('category-edit')) {
-          this.toggleCategoryCollapsed(category.id);
-        }
-      });
-
-      // Edit category
-      group.querySelector('.category-edit').addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.openCategoryModal(category.id);
-      });
-
-      // Add projects to category
-      const projectsContainer = group.querySelector('.category-projects');
-      for (const project of categoryProjects) {
-        projectsContainer.appendChild(this.createProjectItem(project, false));
-      }
-
-      container.appendChild(group);
+    for (const project of visible) {
+      this.appendProjectTree(container, project, 0);
     }
 
-    // Render uncategorized projects
-    const uncategorized = projects.filter(p => !p.categoryId);
-    if (uncategorized.length > 0) {
-      const group = document.createElement('div');
-      group.className = 'category-group';
-
-      const totalTasks = uncategorized.reduce((sum, p) =>
-        sum + p.tasks.filter(t => t.status !== 'done').length, 0);
-
-      group.innerHTML = `
-        <div class="category-header">
-          <span class="category-toggle">&#9660;</span>
-          <span class="category-color" style="background:var(--text-muted)"></span>
-          <span class="category-name">Uncategorized</span>
-          <span class="category-count">${totalTasks}</span>
-        </div>
-        <div class="category-projects" style="max-height: ${uncategorized.length * 40 + 8}px"></div>
-      `;
-
-      group.querySelector('.category-header').addEventListener('click', () => {
-        group.classList.toggle('collapsed');
-        const projectsContainer = group.querySelector('.category-projects');
-        if (group.classList.contains('collapsed')) {
-          projectsContainer.style.maxHeight = '0';
-        } else {
-          projectsContainer.style.maxHeight = uncategorized.length * 40 + 8 + 'px';
-        }
+    // Count archived (including nested)
+    const archivedCount = this.data.projects.filter(p => !p.isInbox && p.status === 'archived').length;
+    if (archivedCount > 0) {
+      const toggle = document.createElement('button');
+      toggle.className = 'show-archived-toggle';
+      toggle.innerHTML = `${this._showArchivedProjects ? '&#9660;' : '&#9654;'} <span>Show archived (${archivedCount})</span>`;
+      toggle.addEventListener('click', () => {
+        this._showArchivedProjects = !this._showArchivedProjects;
+        this.renderCategoriesTree();
       });
-
-      const projectsContainer = group.querySelector('.category-projects');
-      for (const project of uncategorized) {
-        projectsContainer.appendChild(this.createProjectItem(project, false));
-      }
-
-      container.appendChild(group);
+      container.appendChild(toggle);
     }
   },
 
-  createProjectItem(project, inFavorites) {
-    const taskCount = project.tasks.filter(t => t.status !== 'done').length;
+  // Recursively append a project and its children to the container
+  appendProjectTree(container, project, depth) {
+    const allChildren = this.data.projects.filter(p => p.parentProjectId === project.id);
+    const children = this._showArchivedProjects
+      ? allChildren
+      : allChildren.filter(p => p.status !== 'archived');
+    const hasChildren = children.length > 0;
+    if (!this._collapsedSubprojects) this._collapsedSubprojects = new Set();
+    const isExpanded = !this._collapsedSubprojects.has(project.id);
+
+    container.appendChild(this.createProjectItem(project, false, depth, hasChildren, isExpanded));
+
+    if (hasChildren && isExpanded) {
+      for (const child of children) {
+        this.appendProjectTree(container, child, depth + 1);
+      }
+    }
+  },
+
+  toggleSubprojectCollapsed(projectId) {
+    if (!this._collapsedSubprojects) this._collapsedSubprojects = new Set();
+    if (this._collapsedSubprojects.has(projectId)) {
+      this._collapsedSubprojects.delete(projectId);
+    } else {
+      this._collapsedSubprojects.add(projectId);
+    }
+    this.renderSidebar();
+  },
+
+  createProjectItem(project, inFavorites, depth = 0, hasChildren = false, isExpanded = true) {
+    // Count own tasks + descendant tasks
+    const ownTaskCount = project.tasks.filter(t => t.status !== 'done').length;
+    const descendantIds = this.getProjectDescendantIds(project.id);
+    let descendantTaskCount = 0;
+    for (const descId of descendantIds) {
+      const descProject = this.data.projects.find(p => p.id === descId);
+      if (descProject) {
+        descendantTaskCount += descProject.tasks.filter(t => t.status !== 'done').length;
+      }
+    }
+    const totalCount = ownTaskCount + descendantTaskCount;
     const isFavorite = this.isFavorite(project.id);
 
     const el = document.createElement('button');
     el.className = 'project-item';
+    if (depth > 0) el.classList.add('subproject-item');
+    if (project.status === 'archived') el.classList.add('project-archived');
     el.dataset.id = project.id;
+    el.style.paddingLeft = `${12 + depth * 18}px`;
+
+    const toggleHtml = hasChildren
+      ? `<span class="subproject-toggle ${isExpanded ? '' : 'collapsed'}" data-project-id="${project.id}">&#9660;</span>`
+      : (depth > 0 ? '<span class="subproject-spacer"></span>' : '');
 
     el.innerHTML = `
+      ${toggleHtml}
       <span class="project-color" style="background:${project.color}"></span>
       <span class="project-name">${this.escapeHtml(project.name)}</span>
-      <span class="project-count">${taskCount}</span>
+      <span class="project-count">${totalCount}${descendantTaskCount > 0 ? '<span class="subproject-count-detail"> (' + ownTaskCount + '+' + descendantTaskCount + ')</span>' : ''}</span>
       <button class="project-favorite-btn ${isFavorite ? 'favorited' : ''}" title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
         ${isFavorite ? '&#9733;' : '&#9734;'}
       </button>
@@ -143,10 +131,20 @@ export const SidebarMixin = {
 
     el.addEventListener('click', (e) => {
       if (!e.target.classList.contains('project-edit') &&
-          !e.target.classList.contains('project-favorite-btn')) {
+          !e.target.classList.contains('project-favorite-btn') &&
+          !e.target.classList.contains('subproject-toggle')) {
         this.setView(`project-${project.id}`);
       }
     });
+
+    // Subproject toggle
+    const toggle = el.querySelector('.subproject-toggle');
+    if (toggle) {
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleSubprojectCollapsed(project.id);
+      });
+    }
 
     el.querySelector('.project-favorite-btn').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -178,7 +176,10 @@ export const SidebarMixin = {
     container.innerHTML = '';
 
     for (const project of matching) {
-      container.appendChild(this.createProjectItem(project, false));
+      // Show breadcrumb path when filtering
+      const ancestors = this.getProjectAncestors(project.id);
+      const depth = 0; // Flat list when filtering
+      container.appendChild(this.createProjectItem(project, false, depth, false, false));
     }
   },
 

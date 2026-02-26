@@ -304,6 +304,219 @@ export function registerProjectMgmtTools(server: McpServer, store: DataStore): v
     }
   );
 
+  // ── update_project ─────────────────────────────────────────────────
+  server.tool(
+    'update_project',
+    'Update project properties (name, description, color, goal, status, workingDirectory).',
+    {
+      projectId: z.string().describe('Project ID to update'),
+      name: z.string().optional().describe('New project name'),
+      description: z.string().optional().describe('New description'),
+      color: z.string().optional().describe('New hex color'),
+      goal: z.string().optional().describe('New project goal'),
+      status: z.enum(['active', 'paused', 'blocked', 'archived']).optional().describe('New status'),
+      workingDirectory: z.string().optional().describe('New working directory path'),
+    },
+    async (args) => {
+      const data = await store.loadData();
+      const project = data.projects.find((p: any) => p.id === args.projectId);
+      if (!project) {
+        return errorResult(`Project ${args.projectId} not found`);
+      }
+
+      const updates: string[] = [];
+      if (args.name !== undefined) { project.name = args.name; updates.push(`name="${args.name}"`); }
+      if (args.description !== undefined) { project.description = args.description; updates.push('description'); }
+      if (args.color !== undefined) { project.color = args.color; updates.push(`color=${args.color}`); }
+      if (args.goal !== undefined) { project.goal = args.goal; updates.push('goal'); }
+      if (args.status !== undefined) { project.status = args.status; updates.push(`status=${args.status}`); }
+      if (args.workingDirectory !== undefined) { project.workingDirectory = args.workingDirectory; updates.push('workingDirectory'); }
+
+      if (updates.length === 0) {
+        return errorResult('No properties to update');
+      }
+
+      project.updatedAt = new Date().toISOString();
+      await store.saveData(data);
+
+      return textResult(`Updated project "${project.name}": ${updates.join(', ')}`);
+    }
+  );
+
+  // ── archive_project ───────────────────────────────────────────────
+  server.tool(
+    'archive_project',
+    'Archive a project. Optionally cascade to all subprojects.',
+    {
+      projectId: z.string().describe('Project ID to archive'),
+      cascade: z.boolean().optional().describe('Also archive all subprojects (default: false)'),
+    },
+    async (args) => {
+      const data = await store.loadData();
+      const project = data.projects.find((p: any) => p.id === args.projectId);
+      if (!project) {
+        return errorResult(`Project ${args.projectId} not found`);
+      }
+      if (project.isInbox || project.id === 'inbox') {
+        return errorResult('Cannot archive the Inbox');
+      }
+
+      project.status = 'archived';
+      project.updatedAt = new Date().toISOString();
+      let archivedCount = 1;
+
+      if (args.cascade) {
+        // Recursively archive descendants
+        const stack = [args.projectId];
+        while (stack.length > 0) {
+          const parentId = stack.pop()!;
+          const children = data.projects.filter((p: any) => p.parentProjectId === parentId);
+          for (const child of children) {
+            if (child.status !== 'archived') {
+              child.status = 'archived';
+              child.updatedAt = new Date().toISOString();
+              archivedCount++;
+            }
+            stack.push(child.id);
+          }
+        }
+      }
+
+      await store.saveData(data);
+      return textResult(`Archived "${project.name}"${archivedCount > 1 ? ` and ${archivedCount - 1} subproject(s)` : ''}`);
+    }
+  );
+
+  // ── unarchive_project ─────────────────────────────────────────────
+  server.tool(
+    'unarchive_project',
+    'Unarchive a project (set status back to active).',
+    {
+      projectId: z.string().describe('Project ID to unarchive'),
+    },
+    async (args) => {
+      const data = await store.loadData();
+      const project = data.projects.find((p: any) => p.id === args.projectId);
+      if (!project) {
+        return errorResult(`Project ${args.projectId} not found`);
+      }
+
+      project.status = 'active';
+      project.updatedAt = new Date().toISOString();
+      await store.saveData(data);
+
+      return textResult(`Unarchived "${project.name}" — status set to active`);
+    }
+  );
+
+  // ── move_project ──────────────────────────────────────────────────
+  server.tool(
+    'move_project',
+    'Move a project under a new parent, or promote it to top-level by passing null.',
+    {
+      projectId: z.string().describe('Project ID to move'),
+      newParentId: z.string().nullable().describe('New parent project ID, or null to promote to top-level'),
+    },
+    async (args) => {
+      const data = await store.loadData();
+      const project = data.projects.find((p: any) => p.id === args.projectId);
+      if (!project) {
+        return errorResult(`Project ${args.projectId} not found`);
+      }
+
+      if (args.newParentId) {
+        const newParent = data.projects.find((p: any) => p.id === args.newParentId);
+        if (!newParent) {
+          return errorResult(`Parent project ${args.newParentId} not found`);
+        }
+
+        // Prevent circular references: newParent cannot be a descendant of project
+        const stack = [args.projectId];
+        const descendants = new Set<string>();
+        while (stack.length > 0) {
+          const id = stack.pop()!;
+          const children = data.projects.filter((p: any) => p.parentProjectId === id);
+          for (const child of children) {
+            descendants.add(child.id);
+            stack.push(child.id);
+          }
+        }
+        if (descendants.has(args.newParentId)) {
+          return errorResult('Cannot move a project under its own descendant (would create a cycle)');
+        }
+
+        project.parentProjectId = args.newParentId;
+        project.updatedAt = new Date().toISOString();
+        await store.saveData(data);
+        return textResult(`Moved "${project.name}" under "${newParent.name}"`);
+      } else {
+        const oldParentId = project.parentProjectId;
+        const oldParent = oldParentId ? data.projects.find((p: any) => p.id === oldParentId) : null;
+        project.parentProjectId = null;
+        project.updatedAt = new Date().toISOString();
+        await store.saveData(data);
+        return textResult(`Promoted "${project.name}" to top-level${oldParent ? ` (was under "${oldParent.name}")` : ''}`);
+      }
+    }
+  );
+
+  // ── get_project_summary ───────────────────────────────────────────
+  server.tool(
+    'get_project_summary',
+    'Get a project overview: task breakdown by status, subproject progress, blocked/overdue counts.',
+    {
+      projectId: z.string().describe('Project ID to summarize'),
+    },
+    async (args) => {
+      const data = await store.loadData();
+      const project = data.projects.find((p: any) => p.id === args.projectId);
+      if (!project) {
+        return errorResult(`Project ${args.projectId} not found`);
+      }
+
+      const today = todayDate();
+      const tasks = project.tasks || [];
+      const total = tasks.length;
+      const byStatus: Record<string, number> = { todo: 0, 'in-progress': 0, waiting: 0, done: 0 };
+      let overdueCount = 0;
+      let blockedCount = 0;
+
+      for (const t of tasks) {
+        byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+        if (t.dueDate && t.dueDate < today && t.status !== 'done') overdueCount++;
+        if (t.status === 'waiting') blockedCount++;
+      }
+
+      // Subprojects
+      const children = data.projects.filter((p: any) => p.parentProjectId === args.projectId);
+      const childSummaries = children.map((cp: any) => {
+        const cpTasks = cp.tasks || [];
+        const cpTotal = cpTasks.length;
+        const cpDone = cpTasks.filter((t: any) => t.status === 'done').length;
+        const cpPct = cpTotal > 0 ? Math.round(cpDone / cpTotal * 100) : 0;
+        return `  - ${cp.name} (${cp.status || 'active'}): ${cpDone}/${cpTotal} done (${cpPct}%)`;
+      });
+
+      let output = `## ${project.name}\n\n`;
+      output += `**Status:** ${project.status || 'active'}\n`;
+      if (project.goal) output += `**Goal:** ${project.goal}\n`;
+      output += `\n### Tasks (${total})\n`;
+      output += `- To Do: ${byStatus.todo}\n`;
+      output += `- In Progress: ${byStatus['in-progress']}\n`;
+      output += `- Waiting: ${byStatus.waiting}\n`;
+      output += `- Done: ${byStatus.done}\n`;
+      if (overdueCount > 0) output += `- **Overdue: ${overdueCount}**\n`;
+      if (blockedCount > 0) output += `- **Blocked: ${blockedCount}**\n`;
+
+      if (children.length > 0) {
+        output += `\n### Subprojects (${children.length})\n`;
+        output += childSummaries.join('\n') + '\n';
+      }
+
+      return textResult(output);
+    }
+  );
+
   // ── get_project_analytics ───────────────────────────────────────────
   server.tool(
     'get_project_analytics',

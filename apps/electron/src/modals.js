@@ -37,12 +37,21 @@ export const ModalsMixin = {
       cb.parentElement.classList.remove('selected');
     });
 
-    // Populate project dropdown
+    // Populate project dropdown with hierarchy indentation
     const projectSelect = document.getElementById('task-project');
     projectSelect.innerHTML = '<option value="">No Project (Inbox)</option>';
-    this.data.projects.filter(p => !p.isInbox).forEach(p => {
-      projectSelect.innerHTML += `<option value="${p.id}">${this.escapeHtml(p.name)}</option>`;
-    });
+    const addProjectOptions = (parentId, depth) => {
+      const children = this.data.projects.filter(p =>
+        !p.isInbox && (parentId ? p.parentProjectId === parentId : !p.parentProjectId)
+      );
+      for (const p of children) {
+        const indent = '\u00A0\u00A0'.repeat(depth);
+        const prefix = depth > 0 ? '\u2514 ' : '';
+        projectSelect.innerHTML += `<option value="${p.id}">${indent}${prefix}${this.escapeHtml(p.name)}</option>`;
+        addProjectOptions(p.id, depth + 1);
+      }
+    };
+    addProjectOptions(null, 0);
 
     // Reset scheduling fields
     document.getElementById('task-scheduled-time').value = '';
@@ -212,15 +221,35 @@ export const ModalsMixin = {
     form.reset();
     document.getElementById('project-id').value = '';
 
-    // Populate category dropdown
+    // Populate category dropdown — reset visibility (may have been hidden for subprojects)
     const categorySelect = document.getElementById('project-category');
     if (categorySelect) {
+      const categoryGroup = categorySelect.closest('.form-group');
+      if (categoryGroup) categoryGroup.style.display = '';
       categorySelect.innerHTML = '<option value="">No Category</option>';
       for (const category of this.data.categories || []) {
         const option = document.createElement('option');
         option.value = category.id;
         option.textContent = category.name;
         categorySelect.appendChild(option);
+      }
+    }
+
+    // Populate parent project dropdown
+    const parentSelect = document.getElementById('project-parent');
+    if (parentSelect) {
+      parentSelect.innerHTML = '<option value="">None (top-level)</option>';
+      const editingId = projectId || '';
+      // Get descendant IDs to exclude (prevent circular hierarchy)
+      const descendantIds = editingId ? this.getProjectDescendantIds(editingId) : [];
+      for (const p of this.data.projects) {
+        if (p.isInbox || p.id === editingId || descendantIds.includes(p.id)) continue;
+        const ancestors = this.getProjectAncestors(p.id);
+        const prefix = ancestors.length > 0 ? '\u00A0\u00A0'.repeat(ancestors.length) + '\u2514 ' : '';
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = prefix + p.name;
+        parentSelect.appendChild(option);
       }
     }
 
@@ -249,6 +278,14 @@ export const ModalsMixin = {
         // Set category
         if (categorySelect && project.categoryId) {
           categorySelect.value = project.categoryId;
+        }
+
+        // Set parent project
+        if (parentSelect && project.parentProjectId) {
+          parentSelect.value = project.parentProjectId;
+          // Hide category when parent is set (inherits from parent)
+          const categoryGroup = categorySelect?.closest('.form-group');
+          if (categoryGroup) categoryGroup.style.display = 'none';
         }
 
         // Set goal
@@ -287,13 +324,26 @@ export const ModalsMixin = {
     const categorySelect = document.getElementById('project-category');
     const goalInput = document.getElementById('project-goal');
     const statusSelect = document.getElementById('project-status');
+    const parentSelect = document.getElementById('project-parent');
 
     const workingDirInput = document.getElementById('project-working-dir');
+    const parentProjectId = parentSelect ? parentSelect.value || null : null;
+
+    // If project has a parent, inherit category from parent
+    let categoryId = categorySelect ? categorySelect.value || null : null;
+    if (parentProjectId) {
+      const parentProject = this.data.projects.find(p => p.id === parentProjectId);
+      if (parentProject) {
+        categoryId = parentProject.categoryId;
+      }
+    }
+
     const projectData = {
       name: document.getElementById('project-name').value.trim(),
       description: document.getElementById('project-description').value.trim(),
       color: document.getElementById('project-color').value,
-      categoryId: categorySelect ? categorySelect.value || null : null,
+      categoryId: categoryId,
+      parentProjectId: parentProjectId,
       goal: goalInput ? goalInput.value.trim() : '',
       status: statusSelect ? statusSelect.value : 'active',
       workingDirectory: workingDirInput ? workingDirInput.value.trim() || null : null
@@ -632,8 +682,14 @@ export const ModalsMixin = {
     const project = this.data.projects.find(p => p.id === projectId);
     if (!project) return;
 
+    const childProjects = this.getChildProjects(projectId);
+    let message = `Are you sure you want to delete "${project.name}" and all its tasks?`;
+    if (childProjects.length > 0) {
+      message += ` Its ${childProjects.length} subproject(s) will be moved up.`;
+    }
+
     document.getElementById('confirm-title').textContent = 'Delete Project';
-    document.getElementById('confirm-message').textContent = `Are you sure you want to delete "${project.name}" and all its tasks?`;
+    document.getElementById('confirm-message').textContent = message;
 
     const okBtn = document.getElementById('confirm-ok');
     const cancelBtn = document.getElementById('confirm-cancel');

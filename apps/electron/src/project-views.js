@@ -204,6 +204,9 @@ export const ProjectViewsMixin = {
     // Launchers bar (below header, above planning)
     container.appendChild(this.createProjectLaunchersBar(project));
 
+    // Subproject overview table (if project has children)
+    container.appendChild(this.createSubprojectOverview(project));
+
     // Planning section — what to focus on
     container.appendChild(this.createProjectPlanningSection(project));
 
@@ -234,6 +237,57 @@ export const ProjectViewsMixin = {
         this.renderProjectListView(viewContent, project, tasks, viewState);
         break;
     }
+  },
+
+  createSubprojectOverview(project) {
+    const children = this.getChildProjects(project.id);
+    if (children.length === 0) return document.createElement('div');
+
+    const section = document.createElement('div');
+    section.className = 'subproject-overview';
+
+    let rows = '';
+    for (const child of children) {
+      const total = (child.tasks || []).length;
+      const done = (child.tasks || []).filter(t => t.status === 'done').length;
+      const pct = total > 0 ? Math.round(done / total * 100) : 0;
+      const statusBadge = child.status && child.status !== 'active' ? `<span class="subproject-status-badge ${child.status}">${child.status}</span>` : '';
+      rows += `<div class="subproject-overview-row" data-project-id="${child.id}">
+        <span class="subproject-overview-color" style="background:${child.color}"></span>
+        <span class="subproject-overview-name">${this.escapeHtml(child.name)}</span>
+        ${statusBadge}
+        <div class="subproject-overview-progress">
+          <div class="subproject-overview-bar"><div class="subproject-overview-fill" style="width:${pct}%"></div></div>
+        </div>
+        <span class="subproject-overview-stats">${done}/${total}</span>
+      </div>`;
+    }
+
+    section.innerHTML = `
+      <div class="subproject-overview-header">
+        <span>Subprojects</span>
+        <button class="subproject-add-btn">+ Add Subproject</button>
+      </div>
+      ${rows}
+    `;
+
+    // Bind click handlers
+    section.querySelectorAll('.subproject-overview-row').forEach(row => {
+      row.addEventListener('click', () => this.setView('project-' + row.dataset.projectId));
+    });
+
+    section.querySelector('.subproject-add-btn').addEventListener('click', () => {
+      this.openProjectModal();
+      // Pre-select parent after modal opens
+      setTimeout(() => {
+        const parentSelect = document.getElementById('project-parent');
+        if (parentSelect) parentSelect.value = project.id;
+        // Trigger change to hide category
+        parentSelect.dispatchEvent(new Event('change'));
+      }, 50);
+    });
+
+    return section;
   },
 
   createProjectPlanningSection(project) {
@@ -364,10 +418,11 @@ export const ProjectViewsMixin = {
   },
 
   createEnhancedProjectHeader(project) {
-    const tasks = project.tasks || [];
-    const totalTasks = tasks.length;
-    const completedTasks = tasks.filter(t => t.status === 'done');
-    const activeTasks = tasks.filter(t => t.status !== 'done');
+    // Include descendant tasks in stats
+    const allTasks = this.getProjectWithDescendantTasks(project.id);
+    const totalTasks = allTasks.length;
+    const completedTasks = allTasks.filter(t => t.status === 'done');
+    const activeTasks = allTasks.filter(t => t.status !== 'done');
 
     const estMinutesRemaining = activeTasks.reduce((sum, t) => sum + (t.estimatedMinutes || 0), 0);
     const progressPercent = totalTasks > 0 ? Math.round(completedTasks.length / totalTasks * 100) : 0;
@@ -375,8 +430,10 @@ export const ProjectViewsMixin = {
     // Stats summary line
     const blockedCount = activeTasks.filter(t => this.isTaskBlocked(t)).length;
     const claudeCount = activeTasks.filter(t => t.assignedTo === 'claude' || t.executionType === 'ai').length;
+    const childProjects = this.getChildProjects(project.id);
 
     const statParts = [`${activeTasks.length} remaining`];
+    if (childProjects.length > 0) statParts.push(`${childProjects.length} subproject${childProjects.length !== 1 ? 's' : ''}`);
     if (blockedCount > 0) statParts.push(`${blockedCount} blocked`);
     if (claudeCount > 0) statParts.push(`${claudeCount} for Claude`);
     if (estMinutesRemaining > 0) {
@@ -385,16 +442,43 @@ export const ProjectViewsMixin = {
     }
     statParts.push(`${completedTasks.length}/${totalTasks} done`);
 
+    // Breadcrumb for subprojects
+    const ancestors = this.getProjectAncestors(project.id);
+    let breadcrumbHtml = '';
+    if (ancestors.length > 0) {
+      const crumbs = ancestors.map(a =>
+        `<a class="project-breadcrumb-link" data-project-id="${a.id}">${this.escapeHtml(a.name)}</a>`
+      );
+      crumbs.push(`<span class="project-breadcrumb-current">${this.escapeHtml(project.name)}</span>`);
+      breadcrumbHtml = `<div class="project-breadcrumb">${crumbs.join('<span class="project-breadcrumb-sep">/</span>')}</div>`;
+    }
+
+    // Subprojects list
+    let subprojectsHtml = '';
+    if (childProjects.length > 0) {
+      const pills = childProjects.map(cp => {
+        const cpActive = (cp.tasks || []).filter(t => t.status !== 'done').length;
+        return `<button class="subproject-pill" data-project-id="${cp.id}">
+          <span class="subproject-pill-color" style="background:${cp.color}"></span>
+          ${this.escapeHtml(cp.name)}
+          <span class="subproject-pill-count">${cpActive}</span>
+        </button>`;
+      }).join('');
+      subprojectsHtml = `<div class="project-subprojects-row">${pills}</div>`;
+    }
+
     const header = document.createElement('div');
     header.className = 'project-header-card';
 
     header.innerHTML = `
+      ${breadcrumbHtml}
       <div class="project-header-top">
         <span class="project-header-color" style="background:${project.color}"></span>
         <h2 class="project-header-name">${this.escapeHtml(project.name)}</h2>
         <button class="project-header-edit" title="Edit Project">&#9998;</button>
       </div>
       ${project.goal ? `<p class="project-header-goal">${this.escapeHtml(project.goal)}</p>` : ''}
+      ${subprojectsHtml}
       <div class="project-progress-section">
         <div class="project-progress-inline">
           <div class="project-progress-track">
@@ -408,6 +492,21 @@ export const ProjectViewsMixin = {
 
     header.querySelector('.project-header-edit').addEventListener('click', () => {
       this.openProjectModal(project.id);
+    });
+
+    // Breadcrumb link clicks
+    header.querySelectorAll('.project-breadcrumb-link').forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.setView(`project-${link.dataset.projectId}`);
+      });
+    });
+
+    // Subproject pill clicks
+    header.querySelectorAll('.subproject-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        this.setView(`project-${pill.dataset.projectId}`);
+      });
     });
 
     return header;

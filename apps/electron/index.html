@@ -146,6 +146,9 @@
               <button class="roll-banner-dismiss" id="roll-banner-dismiss">Dismiss</button>
             </div>
 
+            <!-- Project Summary Cards -->
+            <div class="today-projects-row" id="today-projects-row"></div>
+
             <!-- Active Tasks Section -->
             <div class="today-working-now" id="today-working-now">
               <div class="working-now-header">
@@ -784,6 +787,14 @@
           <span class="form-hint">Claude sessions launch here. A CLAUDE.md file will be auto-generated.</span>
         </div>
 
+        <div class="form-group">
+          <label for="project-parent">Parent Project</label>
+          <select id="project-parent">
+            <option value="">None (top-level)</option>
+          </select>
+          <span class="form-hint">Nest this project under another as a subproject</span>
+        </div>
+
         <div class="form-row">
           <div class="form-group">
             <label for="project-category">Category</label>
@@ -797,6 +808,7 @@
               <option value="active">⚡ Active</option>
               <option value="paused">💤 Paused</option>
               <option value="blocked">🚫 Blocked</option>
+              <option value="archived">📦 Archived</option>
             </select>
           </div>
         </div>

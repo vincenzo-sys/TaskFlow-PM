@@ -84,6 +84,17 @@ export const EventsMixin = {
       this.saveProjectForm();
     });
 
+    // Parent project changes — hide category when a parent is selected (inherits from parent)
+    const parentProjectSelect = document.getElementById('project-parent');
+    if (parentProjectSelect) {
+      parentProjectSelect.addEventListener('change', () => {
+        const categoryGroup = document.getElementById('project-category')?.closest('.form-group');
+        if (categoryGroup) {
+          categoryGroup.style.display = parentProjectSelect.value ? 'none' : '';
+        }
+      });
+    }
+
     // Tag form
     document.getElementById('tag-form').addEventListener('submit', (e) => {
       e.preventDefault();
